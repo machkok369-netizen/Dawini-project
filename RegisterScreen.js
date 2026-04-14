@@ -1,0 +1,171 @@
+import React, { useState } from 'react';
+import { 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, 
+  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView 
+} from 'react-native';
+// IMPORTANT: Added these imports so the Map works!
+import MapView, { Marker } from 'react-native-maps'; 
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebaseConfig';
+
+export default function RegisterScreen({ navigation }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState('patient'); 
+  const [specialty, setSpecialty] = useState('');
+  const [phone, setPhone] = useState('');
+  const [location, setLocation] = useState({ latitude: 36.2625, longitude: 6.6922 });
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 36.2625, 
+    longitude: 6.6922,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
+  const [loading, setLoading] = useState(false);
+
+const handleRegister = async () => {
+  if (!email || !password) {
+    Alert.alert('Error', 'Please fill email and password');
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    const user = userCredential.user;
+
+    const userData = {
+      uid: user.uid,
+      email: user.email,
+      role: role,
+      createdAt: new Date(),
+      isVerified: role === 'patient' ? true : false,
+      profileCompleted: false,
+      patientProfileCompleted: false, // ← NEW
+    };
+
+    await setDoc(doc(db, 'users', user.uid), userData);
+
+    Alert.alert("✅ Account Created!", "Welcome to Dawini");
+
+    // ✅ UPDATED NAVIGATION
+    if (role === 'patient') {
+      navigation.replace('PatientOnboarding'); // ← Changed from DoctorList
+    } else {
+      navigation.replace('EditProfile', { isNewDoctor: true });
+    }
+  } catch (error) {
+    Alert.alert("Registration Failed", error.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  return (
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+      style={styles.container}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.title}>Join Dawini 🏥</Text>
+        
+        <TextInput 
+          placeholder="Email Address" 
+          style={styles.input} 
+          onChangeText={setEmail} 
+          value={email}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        <TextInput 
+          placeholder="Password" 
+          style={styles.input} 
+          secureTextEntry 
+          onChangeText={setPassword} 
+          value={password} 
+        />
+
+        <Text style={styles.label}>I am a:</Text>
+        <View style={styles.roleContainer}>
+          <TouchableOpacity 
+            style={[styles.roleButton, role === 'patient' && styles.activeRole]} 
+            onPress={() => setRole('patient')}
+          >
+            <Text style={role === 'patient' ? styles.activeText : styles.roleText}>Patient</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.roleButton, role === 'doctor' && styles.activeRole]} 
+            onPress={() => setRole('doctor')}
+          >
+            <Text style={role === 'doctor' ? styles.activeText : styles.roleText}>Doctor</Text>
+          </TouchableOpacity>
+        </View>
+
+        {role === 'doctor' && (
+          <View style={{ width: '100%', marginTop: 10 }}>
+            <TextInput 
+              placeholder="Medical Specialty" 
+              style={styles.input} 
+              onChangeText={setSpecialty} 
+              value={specialty} 
+            />
+            <TextInput 
+              placeholder="Clinic Phone Number" 
+              style={styles.input} 
+              onChangeText={setPhone} 
+              value={phone} 
+              keyboardType="phone-pad"
+            />
+            
+            <Text style={[styles.label, { marginTop: 10 }]}>📍 Pin your Clinic:</Text>
+            <View style={styles.mapViewContainer}>
+              <MapView
+                style={{ flex: 1 }}
+                initialRegion={mapRegion}
+                onRegionChangeComplete={(region) => {
+                  setMapRegion(region);
+                  setLocation({ latitude: region.latitude, longitude: region.longitude });
+                }}
+              >
+                <Marker coordinate={{ latitude: mapRegion.latitude, longitude: mapRegion.longitude }} />
+              </MapView>
+            </View>
+          </View>
+        )}
+
+        <TouchableOpacity 
+          style={[styles.button, loading && styles.buttonDisabled]} 
+          onPress={handleRegister}
+          disabled={loading}
+        >
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+          <Text style={styles.linkText}>Already have an account? Login</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+} 
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollContent: { flexGrow: 1, padding: 20, justifyContent: 'center' },
+  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 30, textAlign: 'center', color: '#2ecc71' },
+  input: { borderWidth: 1, borderColor: '#ddd', padding: 15, borderRadius: 12, marginBottom: 15, fontSize: 16 },
+  label: { fontSize: 16, marginBottom: 10, fontWeight: 'bold', color: '#333' },
+  roleContainer: { flexDirection: 'row', marginBottom: 25, gap: 10 },
+  roleButton: { flex: 1, padding: 12, borderWidth: 2, borderColor: '#2ecc71', borderRadius: 12, alignItems: 'center' },
+  activeRole: { backgroundColor: '#2ecc71' },
+  roleText: { color: '#2ecc71', fontWeight: 'bold' },
+  activeText: { color: '#fff', fontWeight: 'bold' },
+  button: { backgroundColor: '#2ecc71', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  buttonDisabled: { opacity: 0.7 },
+  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  linkText: { textAlign: 'center', marginTop: 20, color: '#2ecc71', fontSize: 16 },
+  mapViewContainer: { height: 200, width: '100%', borderRadius: 10, overflow: 'hidden', marginVertical: 10, borderWidth: 1, borderColor: '#ddd' }
+});
