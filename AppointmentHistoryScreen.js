@@ -137,6 +137,18 @@ export default function AppointmentHistoryScreen({ navigation }) {
     );
   }
 
+  if (fetchError) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyIcon}>⚠️</Text>
+        <Text style={styles.emptyText}>Could not load appointments</Text>
+        <TouchableOpacity style={styles.searchBtn} onPress={() => { setLoading(true); fetchAppointments(); }}>
+          <Text style={styles.searchBtnText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {appointments.length === 0 ? (

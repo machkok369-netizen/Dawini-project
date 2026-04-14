@@ -1,5 +1,5 @@
 import {
-  collection, addDoc, serverTimestamp, updateDoc, doc,
+  collection, addDoc, serverTimestamp, updateDoc, doc, getDoc,
   getDocs, query, where, orderBy, limit, writeBatch
 } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
@@ -116,9 +116,7 @@ export class NotificationService {
 
       // Push notification to patient (if they have a token)
       try {
-        const patientDoc = await import('firebase/firestore').then(({ getDoc }) =>
-          getDoc(doc(db, 'users', patientId))
-        );
+        const patientDoc = await getDoc(doc(db, 'users', patientId));
         const patientToken = patientDoc.data()?.pushToken;
         await NotificationService.sendPushNotification(
           patientToken,
@@ -160,9 +158,7 @@ export class NotificationService {
 
       // Push reminder to patient
       try {
-        const patientDoc = await import('firebase/firestore').then(({ getDoc }) =>
-          getDoc(doc(db, 'users', patientId))
-        );
+        const patientDoc = await getDoc(doc(db, 'users', patientId));
         const patientToken = patientDoc.data()?.pushToken;
         await NotificationService.sendPushNotification(
           patientToken,
@@ -195,9 +191,7 @@ export class NotificationService {
 
         // Push to patient
         try {
-          const patientDoc = await import('firebase/firestore').then(({ getDoc }) =>
-            getDoc(doc(db, 'users', patientId))
-          );
+          const patientDoc = await getDoc(doc(db, 'users', patientId));
           const patientToken = patientDoc.data()?.pushToken;
           await NotificationService.sendPushNotification(
             patientToken,
