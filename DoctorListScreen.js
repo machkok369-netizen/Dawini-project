@@ -33,6 +33,13 @@ const checkSubscriptionStatus = (expiryDate) => {
   } catch (e) { return false; }
 };
 
+const DOCTOR_STATUS_MAP = {
+  in_office: { label: '🟢 IN OFFICE',     color: '#2E7D32', dot: '#4CAF50' },
+  brb:       { label: '🟡 BE RIGHT BACK', color: '#d97706', dot: '#f59e0b' },
+  away:      { label: '🔴 AWAY',          color: '#dc2626', dot: '#ef4444' },
+  vacation:  { label: '🔵 ON VACATION',   color: '#2563eb', dot: '#3b82f6' },
+};
+
 export default function DoctorListScreen({ navigation }) {
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,7 +126,8 @@ export default function DoctorListScreen({ navigation }) {
 
   const renderDoctor = ({ item }) => {
     const isPremium = checkSubscriptionStatus(item.subscriptionExpiry);
-    const isOnline = !!item.isOnline;
+    const statusInfo = DOCTOR_STATUS_MAP[item.status] || { label: '⚪ OFFLINE', color: '#999', dot: '#BDC3C7' };
+    const canNavigate = item.status === 'in_office';
     return (
       <View style={[styles.card, isPremium && styles.premiumBorder]}>
         <View style={styles.header}>
@@ -128,18 +136,16 @@ export default function DoctorListScreen({ navigation }) {
             <View style={styles.nameRow}>
               <Text style={styles.name}>Dr. {item.name}</Text>
               {isPremium && <Text style={styles.goldBadge}>✅</Text>}
-              <View style={[styles.pulse, { backgroundColor: isOnline ? '#4CAF50' : '#BDC3C7' }]} />
+              <View style={[styles.pulse, { backgroundColor: statusInfo.dot }]} />
             </View>
             <Text style={styles.subText}>{item.specialty} • {item.experience || 0} yrs</Text>
           </View>
         </View>
         <View style={styles.footer}>
-          <Text style={[styles.status, { color: isOnline ? '#2E7D32' : '#999' }]}>
-            {isOnline ? '🟢 IN OFFICE' : '⚪ AWAY'}
-          </Text>
-          {isOnline && (
+          <Text style={[styles.status, { color: statusInfo.color }]}>{statusInfo.label}</Text>
+          {canNavigate && (
             <TouchableOpacity style={styles.onWayBtn} onPress={() => handleStartJourney(item)}>
-              <Text style={styles.btnText}>On My Way 🚀</Text>
+              <Text style={styles.btnText}>🗺️ Get Directions</Text>
             </TouchableOpacity>
           )}
         </View>

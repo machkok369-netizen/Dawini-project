@@ -89,6 +89,7 @@ export default function DoctorDashboardScreen({ navigation }) {
   const [slots, setSlots]                   = useState({});
   const [editingSlotDate, setEditingSlotDate] = useState(null);
   const [newSlotValue, setNewSlotValue]     = useState('');
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState(null);
   const [menuVisible, setMenuVisible]       = useState(false);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pinInput, setPinInput]             = useState('');
@@ -104,7 +105,7 @@ export default function DoctorDashboardScreen({ navigation }) {
 
   const today = new Date();
   const todayKey = dateKey(today);
-  const upcomingDays = [0, 1].map(i => {
+  const calendarDays = Array.from({ length: 14 }, (_, i) => {
     const d = new Date(today); d.setDate(d.getDate() + i); return dateKey(d);
   });
 
@@ -140,7 +141,7 @@ export default function DoctorDashboardScreen({ navigation }) {
     if (!profile) return;
     const fetchSlots = async () => {
       const result = {};
-      for (const day of upcomingDays) {
+      for (const day of calendarDays) {
         try {
           const s = await getDoc(doc(db, "slots", `${uid}_${day}`));
           result[day] = s.exists() ? s.data() : { max: profile.maxSlots || 10, booked: 0 };
@@ -474,28 +475,78 @@ export default function DoctorDashboardScreen({ navigation }) {
           )}
         </View>
 
-        {/* Daily Slots */}
+        {/* Calendar Slot Manager (F) */}
         {!assistantActive && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Daily Slots</Text>
-            <Text style={styles.sectionSub}>Manage your capacity — start small, grow over time</Text>
-            {upcomingDays.map(day => {
-              const s = slots[day] || { max: 10, booked: 0 };
+            <Text style={styles.sectionTitle}>Calendar & Slots</Text>
+            <Text style={styles.sectionSub}>Tap a day to manage its capacity</Text>
+
+            {/* Horizontal 14-day calendar strip */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.calendarScroll}
+              contentContainerStyle={styles.calendarContent}
+            >
+              {calendarDays.map(day => {
+                const s = slots[day] || { max: profile?.maxSlots || 10, booked: 0 };
+                const available = Math.max(0, s.max - s.booked);
+                const fc = available === 0 ? '#dc2626' : available <= 3 ? '#d97706' : '#16a34a';
+                const isSelected = (selectedCalendarDay || todayKey) === day;
+                const d = new Date(day);
+                const dayName = day === todayKey ? 'Today'
+                  : day === calendarDays[1] ? 'Tomorrow'
+                  : d.toLocaleDateString('en-GB', { weekday: 'short' });
+                const dayNum = d.getDate();
+                return (
+                  <TouchableOpacity
+                    key={day}
+                    style={[styles.calendarChip, isSelected && styles.calendarChipSelected]}
+                    onPress={() => { setSelectedCalendarDay(day); setEditingSlotDate(null); }}
+                  >
+                    <Text style={[styles.calendarChipDay, isSelected && styles.calendarChipTextSelected]}>{dayName}</Text>
+                    <Text style={[styles.calendarChipNum, isSelected && styles.calendarChipTextSelected]}>{dayNum}</Text>
+                    <Text style={[styles.calendarChipSlots, { color: isSelected ? 'rgba(255,255,255,0.9)' : fc }]}>
+                      {available}/{s.max}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Slot management for selected day */}
+            {(() => {
+              const day = selectedCalendarDay || todayKey;
+              const s = slots[day] || { max: profile?.maxSlots || 10, booked: 0 };
               const available = Math.max(0, s.max - s.booked);
               const fc = available === 0 ? '#dc2626' : available <= 3 ? '#d97706' : '#16a34a';
               const isEditing = editingSlotDate === day;
+              const d = new Date(day);
+              const label = day === todayKey ? 'Today'
+                : d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
               return (
-                <View key={day} style={styles.slotCard}>
+                <View style={styles.slotCard}>
                   <View style={styles.slotTop}>
-                    <Text style={styles.slotDayLabel}>{day === todayKey ? 'Today' : 'Tomorrow'}</Text>
-                    <Text><Text style={{ color: fc, fontWeight: '700' }}>{available}</Text><Text style={styles.slotAvailSub}> / {s.max} slots</Text></Text>
+                    <Text style={styles.slotDayLabel}>{label}</Text>
+                    <Text>
+                      <Text style={{ color: fc, fontWeight: '700' }}>{available}</Text>
+                      <Text style={styles.slotAvailSub}> / {s.max} slots</Text>
+                    </Text>
                   </View>
                   <View style={styles.progressBg}>
                     <View style={[styles.progressFill, { width: `${Math.min(100, (s.booked / s.max) * 100)}%`, backgroundColor: fc }]} />
                   </View>
                   {isEditing ? (
                     <View style={styles.slotEditRow}>
-                      <TextInput style={styles.slotInput} value={newSlotValue} onChangeText={setNewSlotValue} keyboardType="numeric" placeholder={`Current: ${s.max}`} maxLength={3} autoFocus />
+                      <TextInput
+                        style={styles.slotInput}
+                        value={newSlotValue}
+                        onChangeText={setNewSlotValue}
+                        keyboardType="numeric"
+                        placeholder={`Current: ${s.max}`}
+                        maxLength={3}
+                        autoFocus
+                      />
                       <TouchableOpacity style={styles.slotSaveBtn} onPress={() => saveSlot(day, newSlotValue)}>
                         <Text style={styles.slotSaveBtnText}>Save</Text>
                       </TouchableOpacity>
@@ -510,7 +561,7 @@ export default function DoctorDashboardScreen({ navigation }) {
                   )}
                 </View>
               );
-            })}
+            })()}
           </View>
         )}
 
@@ -743,6 +794,16 @@ const styles = StyleSheet.create({
   slotSaveBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   slotBackBtn: { backgroundColor: '#f3f4f6', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
   slotBackBtnText: { color: '#374151', fontSize: 13 },
+
+  // Calendar strip (F)
+  calendarScroll: { marginBottom: 14 },
+  calendarContent: { paddingVertical: 4, gap: 8 },
+  calendarChip: { width: 62, borderRadius: 14, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#f9fafb', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4 },
+  calendarChipSelected: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  calendarChipDay: { fontSize: 10, fontWeight: '600', color: '#9ca3af', marginBottom: 3 },
+  calendarChipNum: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  calendarChipSlots: { fontSize: 10, fontWeight: '600', marginTop: 3 },
+  calendarChipTextSelected: { color: '#fff' },
   resCard: { borderWidth: 1, borderColor: '#f3f4f6', borderRadius: 12, padding: 14, marginBottom: 10 },
   resCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   resCardName: { fontSize: 15, fontWeight: '700', color: '#111827' },
