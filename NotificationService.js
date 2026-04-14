@@ -1,22 +1,90 @@
-import { collection, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
+import {
+  collection, addDoc, serverTimestamp, updateDoc, doc,
+  getDocs, query, where, orderBy, limit, writeBatch
+} from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+// Configure how notifications appear when the app is in the foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export class NotificationService {
-  
-  // ✅ GET NOTIFICATION TOKEN
-  static async getNotificationToken() {
+
+  // ✅ REGISTER FOR PUSH NOTIFICATIONS AND STORE TOKEN
+  static async registerForPushNotifications() {
     try {
-      // For now, simple token storage
-      if (auth.currentUser) {
-        await updateDoc(doc(db, "users", auth.currentUser.uid), {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        return null;
+      }
+
+      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const pushToken = tokenData.data;
+
+      // Store push token in Firestore against the user's profile
+      if (auth.currentUser && pushToken) {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          pushToken,
           lastActive: serverTimestamp(),
         });
       }
-      return true;
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#059669',
+        });
+      }
+
+      return pushToken;
     } catch (e) {
-      console.log('Token error:', e);
-      return false;
+      console.log('Push registration error:', e);
+      return null;
     }
+  }
+
+  // ✅ SEND A PUSH NOTIFICATION VIA EXPO PUSH API
+  static async sendPushNotification(pushToken, title, body) {
+    if (!pushToken) return;
+    try {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: pushToken,
+          sound: 'default',
+          title,
+          body,
+        }),
+      });
+    } catch (e) {
+      console.log('Push send error:', e);
+    }
+  }
+
+  // ✅ GET NOTIFICATION TOKEN (legacy — now also registers for push)
+  static async getNotificationToken() {
+    return await NotificationService.registerForPushNotifications();
   }
 
   // ✅ SEND APPOINTMENT CONFIRMATION
@@ -24,7 +92,7 @@ export class NotificationService {
     try {
       const { patientId, doctorId, doctorName, time } = appointmentData;
 
-      // Save to Firestore
+      // In-app notification for patient
       await addDoc(collection(db, 'notifications'), {
         userId: patientId,
         type: 'appointment_confirmed',
@@ -35,7 +103,7 @@ export class NotificationService {
         createdAt: serverTimestamp(),
       });
 
-      // Notify doctor
+      // In-app notification for doctor
       await addDoc(collection(db, 'notifications'), {
         userId: doctorId,
         type: 'new_appointment',
@@ -45,6 +113,21 @@ export class NotificationService {
         read: false,
         createdAt: serverTimestamp(),
       });
+
+      // Push notification to patient (if they have a token)
+      try {
+        const patientDoc = await import('firebase/firestore').then(({ getDoc }) =>
+          getDoc(doc(db, 'users', patientId))
+        );
+        const patientToken = patientDoc.data()?.pushToken;
+        await NotificationService.sendPushNotification(
+          patientToken,
+          '✅ Appointment Confirmed',
+          `Dr. ${doctorName} at ${time}`
+        );
+      } catch (e) {
+        // Non-critical: push token lookup failed
+      }
     } catch (e) {
       console.log('Notification error:', e);
     }
@@ -74,6 +157,21 @@ export class NotificationService {
         read: false,
         createdAt: serverTimestamp(),
       });
+
+      // Push reminder to patient
+      try {
+        const patientDoc = await import('firebase/firestore').then(({ getDoc }) =>
+          getDoc(doc(db, 'users', patientId))
+        );
+        const patientToken = patientDoc.data()?.pushToken;
+        await NotificationService.sendPushNotification(
+          patientToken,
+          '⏰ Appointment Tomorrow',
+          `${time} with Dr. ${doctorName}`
+        );
+      } catch (e) {
+        // Non-critical
+      }
     } catch (e) {
       console.log('Reminder error:', e);
     }
@@ -82,7 +180,7 @@ export class NotificationService {
   // ✅ NOTIFY APPOINTMENT CANCELLATION
   static async notifyAppointmentCancelled(appointmentData, cancelledBy) {
     try {
-      const { patientId, doctorId, doctorName, patientName } = appointmentData;
+      const { patientId, doctorId, doctorName } = appointmentData;
 
       if (cancelledBy === 'doctor') {
         await addDoc(collection(db, 'notifications'), {
@@ -94,6 +192,21 @@ export class NotificationService {
           read: false,
           createdAt: serverTimestamp(),
         });
+
+        // Push to patient
+        try {
+          const patientDoc = await import('firebase/firestore').then(({ getDoc }) =>
+            getDoc(doc(db, 'users', patientId))
+          );
+          const patientToken = patientDoc.data()?.pushToken;
+          await NotificationService.sendPushNotification(
+            patientToken,
+            '❌ Appointment Cancelled',
+            `Dr. ${doctorName} cancelled your appointment`
+          );
+        } catch (e) {
+          // Non-critical
+        }
       } else {
         await addDoc(collection(db, 'notifications'), {
           userId: doctorId,
@@ -120,10 +233,10 @@ export class NotificationService {
         limit(50)
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(),
+      return snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(),
       }));
     } catch (e) {
       console.log('Get notifications error:', e);
@@ -155,11 +268,11 @@ export class NotificationService {
 
       const snapshot = await getDocs(q);
       const batch = writeBatch(db);
-      
-      snapshot.forEach(doc => {
-        batch.delete(doc.ref);
+
+      snapshot.forEach(d => {
+        batch.delete(d.ref);
       });
-      
+
       await batch.commit();
     } catch (e) {
       console.log('Cleanup error:', e);

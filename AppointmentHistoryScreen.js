@@ -10,12 +10,14 @@ export default function AppointmentHistoryScreen({ navigation }) {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
   }, []);
 
   const fetchAppointments = async () => {
+    setFetchError(false);
     try {
       const userDoc = await auth.currentUser;
       if (!userDoc) return;
@@ -25,6 +27,8 @@ export default function AppointmentHistoryScreen({ navigation }) {
       setAppointments(appointments);
     } catch (e) {
       console.log("Fetch error:", e);
+      setFetchError(true);
+      Alert.alert('Connection Error', 'Could not load appointments. Check your internet connection and try again.');
     } finally {
       setLoading(false);
     }

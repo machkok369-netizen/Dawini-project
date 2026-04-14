@@ -80,8 +80,15 @@ export default function PatientMapScreen({ navigation, route }) {
   useEffect(() => {
     const init = async () => {
       try {
+        // Ask user for context before triggering the OS permission dialog
         let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
+        if (status !== 'granted') {
+          Alert.alert(
+            '📍 Location Needed',
+            'Dawini uses your location to show nearby doctors on the map. Your location is only used while the app is open and is never stored on our servers.',
+            [{ text: 'OK' }]
+          );
+        } else {
           const loc = await Location.getCurrentPositionAsync({});
           setMyLocation({
             latitude: loc.coords.latitude,
@@ -95,6 +102,7 @@ export default function PatientMapScreen({ navigation, route }) {
         setDoctors(docs);
       } catch (e) {
         console.log('Map init error:', e);
+        Alert.alert('Connection Error', 'Could not load doctor data. Please check your internet connection and restart the app.');
       } finally {
         setLoading(false);
       }

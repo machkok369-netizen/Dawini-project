@@ -25,8 +25,21 @@ export default function RegisterScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
 const handleRegister = async () => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!email || !password) {
     Alert.alert('Error', 'Please fill email and password');
+    return;
+  }
+  if (!emailRegex.test(email.trim())) {
+    Alert.alert('Invalid Email', 'Please enter a valid email address');
+    return;
+  }
+  if (password.length < 6) {
+    Alert.alert('Weak Password', 'Password must be at least 6 characters');
+    return;
+  }
+  if (role === 'doctor' && !specialty.trim()) {
+    Alert.alert('Missing Info', 'Please enter your medical specialty');
     return;
   }
 
