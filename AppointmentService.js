@@ -1,8 +1,8 @@
 import {
   collection, addDoc, updateDoc, doc, getDocs, query, where,
-  serverTimestamp, increment, getDoc, orderBy, writeBatch, deleteDoc
+  serverTimestamp, increment, getDoc, orderBy, writeBatch, deleteDoc, limit
 } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import NotificationService from './NotificationService';
 
 export class AppointmentService {
@@ -190,10 +190,20 @@ export class AppointmentService {
   // ✅ COMPLETE APPOINTMENT
   static async completeAppointment(appointmentId) {
     try {
-      await updateDoc(doc(db, 'reservations', appointmentId), {
+      const appointmentRef = doc(db, 'reservations', appointmentId);
+      const appointmentSnap = await getDoc(appointmentRef);
+      const appointmentData = appointmentSnap.exists() ? appointmentSnap.data() : null;
+
+      // Idempotency guard — if already completed, return early.
+      if (appointmentData?.status === 'completed') {
+        return { success: true };
+      }
+
+      await updateDoc(appointmentRef, {
         status: 'completed',
         completedAt: serverTimestamp(),
       });
+
       return { success: true };
     } catch (error) {
       console.log("Complete appointment error:", error);

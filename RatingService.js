@@ -2,7 +2,7 @@ import {
   collection, addDoc, query, where, getDocs, serverTimestamp,
   updateDoc, doc, getDoc, writeBatch
 } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 
 export class RatingService {
 

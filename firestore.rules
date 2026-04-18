@@ -1,0 +1,277 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // ✅ HELPER FUNCTIONS
+    // ==========================================
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // Both super-admin UIDs used in the app.
+    // TODO: replace with a custom claim (Firebase Admin SDK / Cloud Functions)
+    // so the UIDs are never embedded in client-side code.
+    function isAdmin() {
+      return request.auth.uid in [
+        "MQcjg6IlHUa0WTfDmfOxqzXcIbG3",
+        "WGQ7mo55xmTBOuQrrTnN98XMI9C3"
+      ];
+    }
+
+    function isDoctor(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role == 'doctor';
+    }
+
+    // ==========================================
+    // 👥 USERS
+    // ==========================================
+    match /users/{userId} {
+      // Any authenticated user can read user profiles.
+      // Needed by: PatientMapScreen (doctor list), DoctorDashBoard, AdminScreen, etc.
+      allow read: if isAuth();
+
+      // User can create their own profile during registration (RegisterScreen).
+      allow create: if isAuth() && isUser(userId) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.role in ['doctor', 'patient'];
+
+      // User can update their own profile.
+      // Only isSuspended and adminRole are truly admin-only —
+      // everything else (profileCompleted, subscriptionEnd, isVerified, etc.)
+      // is written by the app during onboarding / first profile save.
+      allow update: if isAuth() && isUser(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['isSuspended', 'adminRole']);
+
+      // Admin can read and write any field on any user
+      // (verification, suspension, subscription extension, etc.).
+      allow read, write: if isAdmin();
+
+      // No client-side deletion — admin uses Firebase Console or Cloud Functions.
+      allow delete: if false;
+    }
+
+    // ==========================================
+    // 📅 RESERVATIONS (APPOINTMENTS)
+    // ==========================================
+    match /reservations/{appointmentId} {
+      // Patient or doctor of this appointment can read it.
+      allow read: if isAuth() &&
+        (resource.data.patientId == request.auth.uid ||
+         resource.data.doctorId == request.auth.uid);
+
+      // Patient creates their own appointment (PatientMapScreen / AppointmentService).
+      allow create: if isAuth() &&
+        request.resource.data.patientId == request.auth.uid &&
+        request.resource.data.doctorId != null &&
+        request.resource.data.date != null &&
+        request.resource.data.time != null &&
+        request.resource.data.status in ['pending', 'confirmed'];
+
+      // Patient reschedules (date / time / note only).
+      allow update: if isAuth() &&
+        resource.data.patientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['date', 'time', 'note', 'rescheduledAt']);
+
+      // Patient cancels their own appointment.
+      // AppointmentService.cancelAppointment also writes cancelledBy / cancelledAt;
+      // those extra keys are allowed here so the service call succeeds.
+      allow update: if isAuth() &&
+        resource.data.patientId == request.auth.uid &&
+        request.resource.data.status == 'cancelled' &&
+        resource.data.status != 'cancelled';
+
+      // Doctor confirms, completes, cancels, or marks no-show.
+      // DoctorDashBoardScreen writes {status} only;
+      // AppointmentService writes {status, cancelledBy, cancelledAt, completedAt, noShowAt}.
+      allow update: if isAuth() &&
+        resource.data.doctorId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'doctorNotes', 'cancelledBy', 'cancelledAt',
+                    'completedAt', 'noShowAt']) &&
+        request.resource.data.status in ['confirmed', 'completed', 'cancelled', 'no_show'];
+
+      // Admin full access (includes batch delete for cleanup).
+      allow read, write, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // ⭐ RATINGS / REVIEWS
+    // ==========================================
+    match /ratings/{ratingId} {
+      // Any authenticated user can read ratings (displayed on doctor cards).
+      allow read: if isAuth();
+
+      // Patient submits a rating (PatientMapScreen / RatingService).
+      // The 18:00 gate and appointment-link check live in JS (getRatingEligibility).
+      allow create: if isAuth() &&
+        request.resource.data.patientId == request.auth.uid &&
+        request.resource.data.overall is int &&
+        request.resource.data.overall >= 1 &&
+        request.resource.data.overall <= 5;
+
+      // Patient edits their own rating (limited fields).
+      allow update: if isAuth() &&
+        resource.data.patientId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['overall', 'comment', 'waitTime', 'attitude', 'cleanliness']);
+
+      // Patient can delete their own rating.
+      allow delete: if isAuth() && resource.data.patientId == request.auth.uid;
+
+      // Admin full access.
+      allow read, write, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 🔔 NOTIFICATIONS
+    // ==========================================
+    match /notifications/{notificationId} {
+      // User can read their own notifications.
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+
+      // Any authenticated user can create a notification.
+      // Notifications are written client-side by both patients and doctors
+      // (NotificationService called from AppointmentService).
+      // TODO: move notification creation to Cloud Functions for stricter control.
+      allow create: if isAuth();
+
+      // User can mark their own notification as read.
+      allow update: if isAuth() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+
+      // User can delete their own notifications.
+      allow delete: if isAuth() && resource.data.userId == request.auth.uid;
+
+      // Admin full access (cleanup, monitoring).
+      allow read, write, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 📍 SLOTS (APPOINTMENT AVAILABILITY)
+    // ==========================================
+    match /slots/{slotId} {
+      // Any authenticated user can read slots.
+      allow read: if isAuth();
+
+      // Doctor creates / sets their own slot document (DoctorDashBoardScreen.saveSlot).
+      allow create: if isAuth() &&
+        isDoctor(request.auth.uid) &&
+        request.resource.data.doctorId == request.auth.uid;
+
+      allow update: if isAuth() && (
+        // Doctor updates their own slot config (max, date, etc.).
+        (resource.data.doctorId == request.auth.uid) ||
+        // Patient increments / decrements the booked count when booking or cancelling.
+        // The slot doctorId must already be in the document (slot must exist).
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['booked'])
+      );
+
+      // Admin full access.
+      allow write: if isAdmin();
+    }
+
+    // ==========================================
+    // ⚙️ PAYMENT CONFIG (Doctor subscription renewal via El Dahabya)
+    // ==========================================
+    match /payment_config/{configId} {
+      // Admin only — stores El Dahabya subscription payment configuration.
+      allow read, write: if isAdmin();
+    }
+
+    // ==========================================
+    // 📋 ADMIN APPROVAL REQUESTS
+    // ==========================================
+    match /admin_approval_requests/{requestId} {
+      // Admin can read all requests; requester can read their own.
+      allow read: if isAdmin() ||
+        (isAuth() && resource.data.requestedBy == request.auth.uid);
+
+      // Any authenticated admin-tier user can create a request.
+      allow create: if isAuth();
+
+      // Only admins can update (approve/reject) or delete requests.
+      allow update, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 💡 SUGGESTIONS
+    // ==========================================
+    match /suggestions/{suggestionId} {
+      // Patient submits a suggestion (PatientMapScreen.submitSuggestion).
+      allow create: if isAuth() &&
+        request.resource.data.userId == request.auth.uid;
+
+      // User can read their own suggestions.
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+
+      // Admin full access (review, respond, delete).
+      allow read, write, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 🚗 ACTIVE TRIPS (LIVE TRACKING)
+    // ==========================================
+    match /active_trips/{tripId} {
+      // Doctor can read/write their own trip.
+      allow read: if isAuth() && resource.data.doctorId == request.auth.uid;
+      allow write: if isAuth() &&
+        (request.resource.data.doctorId == request.auth.uid ||
+         resource.data.doctorId == request.auth.uid);
+
+      // Any authenticated patient can read trips for the Tracking screen.
+      // TrackingScreen currently uses a hardcoded tripId ("trip_001").
+      // TODO: restrict to patients who have an appointment with that doctor.
+      allow read: if isAuth();
+
+      // Doctor or admin can delete their trip document.
+      allow delete: if isAuth() &&
+        (resource.data.doctorId == request.auth.uid || isAdmin());
+
+      // Admin full access.
+      allow read, write: if isAdmin();
+    }
+
+    // ==========================================
+    // 💬 CHAT ROOMS (Future feature)
+    // ==========================================
+    match /chatRooms/{chatId} {
+      allow read: if isAuth() &&
+        request.auth.uid in resource.data.participants;
+
+      allow create, update: if isAuth() &&
+        request.auth.uid in request.resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read: if isAuth() &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/chatRooms/$(chatId)).data.participants;
+
+        allow create: if isAuth() &&
+          request.resource.data.senderId == request.auth.uid;
+
+        allow update: if isAuth() &&
+          resource.data.senderId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+
+        allow delete: if isAuth() &&
+          resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // ==========================================
+    // 🔒 DENY EVERYTHING ELSE
+    // ==========================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

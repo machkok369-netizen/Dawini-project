@@ -2,7 +2,7 @@ import {
   collection, addDoc, serverTimestamp, updateDoc, doc, getDoc,
   getDocs, query, where, orderBy, limit, writeBatch
 } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -35,12 +35,16 @@ export class NotificationService {
       const tokenData = await Notifications.getExpoPushTokenAsync();
       const pushToken = tokenData.data;
 
-      // Store push token in Firestore against the user's profile
+      // Store push token in Firestore only when it has changed
       if (auth.currentUser && pushToken) {
-        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-          pushToken,
-          lastActive: serverTimestamp(),
-        });
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.data()?.pushToken !== pushToken) {
+          await updateDoc(userRef, {
+            pushToken,
+            lastActive: serverTimestamp(),
+          });
+        }
       }
 
       if (Platform.OS === 'android') {

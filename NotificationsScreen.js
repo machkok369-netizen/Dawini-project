@@ -4,8 +4,8 @@ import {
   ActivityIndicator, RefreshControl, Alert
 } from 'react-native';
 import { onSnapshot, query, collection, where, orderBy } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig';
-import NotificationService from '../services/NotificationService';
+import { db, auth } from './firebaseConfig';
+import NotificationService from './NotificationService';
 
 export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);

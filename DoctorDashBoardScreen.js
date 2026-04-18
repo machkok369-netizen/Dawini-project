@@ -8,7 +8,7 @@ import {
   where, onSnapshot, orderBy, setDoc, increment
 } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -77,7 +77,14 @@ const generateQueueHTML = (profile, reservations, dateStr) => `
 </body></html>`;
 
 export default function DoctorDashboardScreen({ navigation }) {
-  const uid = auth.currentUser.uid;
+  const uid = auth.currentUser?.uid;
+
+  // Guard against session expiry — redirect to login rather than crashing.
+  useEffect(() => {
+    if (!uid) {
+      navigation.replace('Login');
+    }
+  }, [uid]);
 
   const [profile, setProfile]               = useState(null);
   const [loading, setLoading]               = useState(true);

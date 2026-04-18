@@ -7,7 +7,7 @@ import {
 import MapView, { Marker } from 'react-native-maps'; 
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig';
+import { auth, db } from './firebaseConfig';
 
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
