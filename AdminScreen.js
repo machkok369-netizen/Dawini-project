@@ -576,27 +576,28 @@ export default function AdminScreen({ navigation }) {
     </ScrollView>
   );
 
-  const initializePaymentPlaceholder = async () => {
+  const initializeSubscriptionPayment = async () => {
     if (!isSuperAdmin) {
-      await createApprovalRequest('init_payment_placeholder', {});
-      Alert.alert('Approval Required', 'Payment setup request sent to super admin.');
+      await createApprovalRequest('init_subscription_payment', {});
+      Alert.alert('Approval Required', 'Subscription payment setup request sent to super admin.');
       return;
     }
     try {
-      await setDoc(doc(db, 'payment_config', 'el_dahabya'), {
+      await setDoc(doc(db, 'payment_config', 'subscription'), {
         enabled: false,
         status: 'placeholder',
         provider: 'el_dahabya',
+        purpose: 'doctor_subscription_renewal',
         integrationPoints: [
-          'bank_account_linking',
-          'transfer_confirmation_webhook',
-          'daily_settlement_reconciliation',
+          'subscription_payment_webhook',
+          'renewal_confirmation',
+          'subscription_expiry_notification',
         ],
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      Alert.alert('Ready', 'El Dahabya payment placeholder initialized.');
+      Alert.alert('Ready', 'El Dahabya subscription payment placeholder initialized.');
     } catch (e) {
-      Alert.alert('Error', 'Could not initialize payment placeholder.');
+      Alert.alert('Error', 'Could not initialize subscription payment placeholder.');
     }
   };
 
@@ -635,10 +636,10 @@ export default function AdminScreen({ navigation }) {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.settingItem} onPress={initializePaymentPlaceholder}>
+        <TouchableOpacity style={styles.settingItem} onPress={initializeSubscriptionPayment}>
           <View>
-            <Text style={styles.settingTitle}>💳 El Dahabya Payment Placeholder</Text>
-            <Text style={styles.settingDesc}>Prepare Firestore structure for bank integration</Text>
+            <Text style={styles.settingTitle}>💳 Subscription Payment Setup</Text>
+            <Text style={styles.settingDesc}>Prepare El Dahabya integration for doctor subscription renewals</Text>
           </View>
         </TouchableOpacity>
 

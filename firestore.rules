@@ -180,42 +180,10 @@ service cloud.firestore {
     }
 
     // ==========================================
-    // 💰 DOCTOR EARNINGS
-    // ==========================================
-    match /doctor_earnings/{doctorId} {
-      // Doctor can read their own earnings (DoctorDashBoardScreen live listener).
-      allow read: if isAuth() && isUser(doctorId);
-
-      // Any authenticated user can write (AppointmentService.completeAppointment
-      // uses setDoc with merge:true from the patient/doctor client).
-      // TODO: move to a Cloud Function triggered on appointment completion.
-      allow write: if isAuth();
-
-      // Admin full access.
-      allow read, write: if isAdmin();
-    }
-
-    // ==========================================
-    // 💳 PAYMENT TRANSACTIONS
-    // ==========================================
-    match /payment_transactions/{transactionId} {
-      // Doctor can read their own transactions.
-      allow read: if isAuth() && resource.data.doctorId == request.auth.uid;
-
-      // Any authenticated user can create a transaction record
-      // (AppointmentService.completeAppointment writes this client-side).
-      // TODO: move to a Cloud Function.
-      allow create: if isAuth();
-
-      // Admin full access.
-      allow read, write: if isAdmin();
-    }
-
-    // ==========================================
-    // ⚙️ PAYMENT CONFIG
+    // ⚙️ PAYMENT CONFIG (Doctor subscription renewal via El Dahabya)
     // ==========================================
     match /payment_config/{configId} {
-      // Admin only — stores El Dahabya integration placeholders.
+      // Admin only — stores El Dahabya subscription payment configuration.
       allow read, write: if isAdmin();
     }
 

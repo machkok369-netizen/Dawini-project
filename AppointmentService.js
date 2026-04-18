@@ -1,6 +1,6 @@
 import {
   collection, addDoc, updateDoc, doc, getDocs, query, where,
-  serverTimestamp, increment, getDoc, orderBy, writeBatch, deleteDoc, setDoc, limit
+  serverTimestamp, increment, getDoc, orderBy, writeBatch, deleteDoc, limit
 } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 import NotificationService from './NotificationService';
@@ -194,8 +194,7 @@ export class AppointmentService {
       const appointmentSnap = await getDoc(appointmentRef);
       const appointmentData = appointmentSnap.exists() ? appointmentSnap.data() : null;
 
-      // Idempotency guard — if already completed, do not create a duplicate
-      // payment_transactions record or double-increment doctor_earnings.
+      // Idempotency guard — if already completed, return early.
       if (appointmentData?.status === 'completed') {
         return { success: true };
       }
@@ -204,32 +203,6 @@ export class AppointmentService {
         status: 'completed',
         completedAt: serverTimestamp(),
       });
-
-      if (appointmentData?.doctorId) {
-        let transactionAmount = appointmentData.visitCost;
-        if (!transactionAmount || transactionAmount <= 0) {
-          const doctorSnap = await getDoc(doc(db, 'users', appointmentData.doctorId));
-          transactionAmount = doctorSnap.exists() ? doctorSnap.data()?.visitCost : 0;
-        }
-
-        await setDoc(doc(db, 'doctor_earnings', appointmentData.doctorId), {
-          doctorId: appointmentData.doctorId,
-          totalCompletedAppointments: increment(1),
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-
-        if (transactionAmount > 0) {
-          await addDoc(collection(db, 'payment_transactions'), {
-            doctorId: appointmentData.doctorId,
-            appointmentId,
-            amount: transactionAmount,
-            status: 'pending_bank_transfer',
-            paymentMethod: 'el_dahabya_placeholder',
-            createdAt: serverTimestamp(),
-            integrationNote: 'Reserved for El Dahabya bank integration',
-          });
-        }
-      }
 
       return { success: true };
     } catch (error) {
