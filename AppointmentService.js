@@ -194,6 +194,12 @@ export class AppointmentService {
       const appointmentSnap = await getDoc(appointmentRef);
       const appointmentData = appointmentSnap.exists() ? appointmentSnap.data() : null;
 
+      // Idempotency guard — if already completed, do not create a duplicate
+      // payment_transactions record or double-increment doctor_earnings.
+      if (appointmentData?.status === 'completed') {
+        return { success: true };
+      }
+
       await updateDoc(appointmentRef, {
         status: 'completed',
         completedAt: serverTimestamp(),

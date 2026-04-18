@@ -8,7 +8,7 @@ import * as Location from 'expo-location';
 import {
   collection, query, where, getDocs, addDoc,
   serverTimestamp, doc, getDoc, updateDoc, increment,
-  onSnapshot
+  onSnapshot, runTransaction
 } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 
@@ -312,14 +312,17 @@ export default function PatientMapScreen({ navigation, route }) {
     }
     setBookingLoading(true);
     try {
-      const uid = auth.currentUser.uid;
+      const uid = auth.currentUser?.uid;
+      if (!uid) {
+        Alert.alert('Error', 'You must be logged in to book.');
+        return;
+      }
       const userSnap = await getDoc(doc(db, 'users', uid));
       const userData = userSnap.data();
       const today = dateKey(new Date());
       const acceptMode = selectedDoctor.acceptMode || 'manual';
 
-      // ✅ AUTO-FILLED FROM PATIENT ONBOARDING
-      await addDoc(collection(db, 'reservations'), {
+      const appointmentData = {
         doctorId: selectedDoctor.id,
         patientId: uid,
         doctorName: selectedDoctor.fullName || selectedDoctor.name || 'Doctor',
@@ -330,22 +333,41 @@ export default function PatientMapScreen({ navigation, route }) {
         bookingFor: bookForRelative ? 'relative' : 'self',
         bookedForName: bookForRelative ? bookingRelativeName.trim() : (userData?.fullName || 'Patient'),
         bookedForRelation: bookForRelative ? bookingRelativeRelation.trim() : 'self',
-        bookedForAge: bookForRelative
-          ? parsedRelativeAge
-          : (userData?.age || null),
+        bookedForAge: bookForRelative ? parsedRelativeAge : (userData?.age || null),
         date: new Date(),
         time: bookingTime,
         note: bookingNote,
         status: acceptMode === 'auto' ? 'confirmed' : 'pending',
         createdAt: serverTimestamp(),
+      };
+
+      // ✅ Atomic slot-capacity check: read → verify capacity → write both
+      // reservation and slot increment in a single transaction to prevent
+      // double-booking when concurrent requests arrive for the last slot.
+      const slotRef = doc(db, 'slots', `${selectedDoctor.id}_${today}`);
+      const newReservationRef = doc(collection(db, 'reservations'));
+
+      let noSlotsAvailable = false;
+      await runTransaction(db, async (transaction) => {
+        const slotDoc = await transaction.get(slotRef);
+        if (slotDoc.exists()) {
+          const { booked = 0, max = 10 } = slotDoc.data();
+          if (booked >= max) {
+            noSlotsAvailable = true;
+            return;
+          }
+          transaction.update(slotRef, { booked: increment(1) });
+        }
+        transaction.set(newReservationRef, appointmentData);
       });
 
-      // Increment booked count
-      try {
-        await updateDoc(doc(db, 'slots', `${selectedDoctor.id}_${today}`), {
-          booked: increment(1)
-        });
-      } catch (e) {}
+      if (noSlotsAvailable) {
+        Alert.alert(
+          'No Slots Available',
+          'This doctor has no available slots for today. Please try again tomorrow or choose another doctor.'
+        );
+        return;
+      }
 
       Alert.alert(
         '✅ Booked!',

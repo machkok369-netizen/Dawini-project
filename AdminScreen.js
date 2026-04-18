@@ -10,9 +10,12 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 
+// Super-admin UIDs must be set via the EXPO_PUBLIC_SUPER_ADMIN_UIDS environment variable.
+// If the variable is missing the array is empty so no one gets super-admin rights
+// (fail-secure). Never add UIDs as a hardcoded fallback here.
 const SUPER_ADMIN_UIDS = process.env.EXPO_PUBLIC_SUPER_ADMIN_UIDS
   ? process.env.EXPO_PUBLIC_SUPER_ADMIN_UIDS.split(',').map((uid) => uid.trim()).filter(Boolean)
-  : ["MQcjg6IlHUa0WTfDmfOxqzXcIbG3", "WGQ7mo55xmTBOuQrrTnN98XMI9C3"];
+  : [];
 
 export default function AdminScreen({ navigation }) {
   const [currentTab, setCurrentTab] = useState('dashboard'); // dashboard, doctors, patients, reports, settings
@@ -48,6 +51,10 @@ export default function AdminScreen({ navigation }) {
     const checkAdminAccess = async () => {
       try {
         const uid = auth.currentUser?.uid;
+        if (!uid) {
+          navigation.goBack();
+          return;
+        }
         const userSnap = await getDoc(doc(db, 'users', uid));
         const userData = userSnap.exists() ? userSnap.data() : {};
         const superAdmin = SUPER_ADMIN_UIDS.includes(uid) || userData.adminRole === 'super_admin';
@@ -69,7 +76,7 @@ export default function AdminScreen({ navigation }) {
 
   const createApprovalRequest = async (type, payload = {}) => {
     await addDoc(collection(db, 'admin_approval_requests'), {
-      requestedBy: auth.currentUser.uid,
+      requestedBy: auth.currentUser?.uid,
       type,
       payload,
       status: 'pending',

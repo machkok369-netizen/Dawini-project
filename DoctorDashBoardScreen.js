@@ -77,7 +77,14 @@ const generateQueueHTML = (profile, reservations, dateStr) => `
 </body></html>`;
 
 export default function DoctorDashboardScreen({ navigation }) {
-  const uid = auth.currentUser.uid;
+  const uid = auth.currentUser?.uid;
+
+  // Guard against session expiry — redirect to login rather than crashing.
+  useEffect(() => {
+    if (!uid) {
+      navigation.replace('Login');
+    }
+  }, [uid]);
 
   const [profile, setProfile]               = useState(null);
   const [loading, setLoading]               = useState(true);
@@ -154,6 +161,7 @@ export default function DoctorDashboardScreen({ navigation }) {
   }, [profile]);
 
   useEffect(() => {
+    if (!uid) return;
     const earningsRef = doc(db, 'doctor_earnings', uid);
     return onSnapshot(earningsRef, (snap) => {
       if (snap.exists()) {
