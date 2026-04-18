@@ -200,21 +200,29 @@ export class AppointmentService {
       });
 
       if (appointmentData?.doctorId) {
+        let transactionAmount = appointmentData.visitCost;
+        if (!transactionAmount || transactionAmount <= 0) {
+          const doctorSnap = await getDoc(doc(db, 'users', appointmentData.doctorId));
+          transactionAmount = doctorSnap.exists() ? doctorSnap.data()?.visitCost : 0;
+        }
+
         await setDoc(doc(db, 'doctor_earnings', appointmentData.doctorId), {
           doctorId: appointmentData.doctorId,
           totalCompletedAppointments: increment(1),
           updatedAt: serverTimestamp(),
         }, { merge: true });
 
-        await addDoc(collection(db, 'payment_transactions'), {
-          doctorId: appointmentData.doctorId,
-          appointmentId,
-          amount: appointmentData.visitCost || 0,
-          status: 'pending_bank_transfer',
-          paymentMethod: 'el_dahabya_placeholder',
-          createdAt: serverTimestamp(),
-          integrationNote: 'Reserved for El Dahabya bank integration',
-        });
+        if (transactionAmount > 0) {
+          await addDoc(collection(db, 'payment_transactions'), {
+            doctorId: appointmentData.doctorId,
+            appointmentId,
+            amount: transactionAmount,
+            status: 'pending_bank_transfer',
+            paymentMethod: 'el_dahabya_placeholder',
+            createdAt: serverTimestamp(),
+            integrationNote: 'Reserved for El Dahabya bank integration',
+          });
+        }
       }
 
       return { success: true };

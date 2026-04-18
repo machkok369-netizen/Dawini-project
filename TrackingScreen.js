@@ -15,7 +15,7 @@ export default function TrackingScreen({ route }) {
   });
 
   useEffect(() => {
-    if (targetDoctor?.location) return undefined;
+    if (targetDoctor?.location) return () => {};
 
     const unsubListener = onSnapshot(
       doc(db, "active_trips", "trip_001"),

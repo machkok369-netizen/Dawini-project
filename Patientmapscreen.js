@@ -37,7 +37,7 @@ const DISCOVERY_RADIUS_KM = 3;
 
 const toRad = (deg) => (deg * Math.PI) / 180;
 const calculateDistanceKm = (from, to) => {
-  if (!from || !to) return Number.POSITIVE_INFINITY;
+  if (!from || !to) return null;
   const dLat = toRad(to.latitude - from.latitude);
   const dLon = toRad(to.longitude - from.longitude);
   const a = Math.sin(dLat / 2) ** 2
@@ -213,7 +213,7 @@ export default function PatientMapScreen({ navigation, route }) {
             ...d.data(),
             createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(),
           }))
-          .filter(r => r.isPublicComment !== false)
+          .filter(r => r.isPublicComment === true)
           .sort((a, b) => b.createdAt - a.createdAt);
         setDoctorRatings(ratings);
       } catch (e) {
@@ -271,6 +271,7 @@ export default function PatientMapScreen({ navigation, route }) {
       .map(d => ({ id: d.id, ...d.data() }))
       .find((appointment) => {
         const appointmentDate = appointment.date?.toDate ? appointment.date.toDate() : new Date(appointment.date);
+        if (Number.isNaN(appointmentDate.getTime())) return false;
         const afterCutoff = new Date(appointmentDate);
         afterCutoff.setHours(18, 0, 0, 0);
         return now >= afterCutoff && !ratedAppointmentIds.has(appointment.id);
@@ -296,12 +297,17 @@ export default function PatientMapScreen({ navigation, route }) {
 
   // ── Book reservation ──────────────────────────────────────────────────────────
   const handleBook = async () => {
+    const parsedRelativeAge = bookingRelativeAge.trim() ? parseInt(bookingRelativeAge, 10) : null;
     if (!bookingTime.trim()) {
       Alert.alert('Missing', 'Please enter a preferred time.');
       return;
     }
     if (bookForRelative && !bookingRelativeName.trim()) {
       Alert.alert('Missing', 'Please enter relative name for this booking.');
+      return;
+    }
+    if (bookForRelative && bookingRelativeAge.trim() && Number.isNaN(parsedRelativeAge)) {
+      Alert.alert('Invalid Relative Age', 'Please enter a valid relative age or leave it empty.');
       return;
     }
     setBookingLoading(true);
@@ -325,7 +331,7 @@ export default function PatientMapScreen({ navigation, route }) {
         bookedForName: bookForRelative ? bookingRelativeName.trim() : (userData?.fullName || 'Patient'),
         bookedForRelation: bookForRelative ? bookingRelativeRelation.trim() : 'self',
         bookedForAge: bookForRelative
-          ? (bookingRelativeAge.trim() ? parseInt(bookingRelativeAge, 10) : null)
+          ? parsedRelativeAge
           : (userData?.age || null),
         date: new Date(),
         time: bookingTime,
@@ -540,7 +546,7 @@ export default function PatientMapScreen({ navigation, route }) {
             <TouchableOpacity key={doctor.id} style={styles.nearbyChip} onPress={() => handlePinTap(doctor)}>
               <Text style={styles.nearbyChipTitle} numberOfLines={1}>Dr. {doctor.fullName}</Text>
               <Text style={styles.nearbyChipSub} numberOfLines={1}>
-                {doctor.specialty} {doctor.distanceKm !== null && doctor.distanceKm !== undefined ? `· ${doctor.distanceKm.toFixed(2)}km` : ''}
+                {doctor.specialty} {doctor.distanceKm != null ? `· ${doctor.distanceKm.toFixed(2)}km` : ''}
               </Text>
             </TouchableOpacity>
           ))}
@@ -619,7 +625,7 @@ export default function PatientMapScreen({ navigation, route }) {
                     {selectedDoctor.fullNameAr ? <Text style={styles.cardNameAr}>{selectedDoctor.fullNameAr}</Text> : null}
                     <Text style={styles.cardSpecialty}>{selectedDoctor.specialty}</Text>
                     <Text style={styles.cardCabinet}>{selectedDoctor.cabinetName}</Text>
-                    {selectedDoctor.distanceKm !== null && selectedDoctor.distanceKm !== undefined ? (
+                    {selectedDoctor.distanceKm != null ? (
                       <Text style={styles.cardDistance}>📍 {selectedDoctor.distanceKm.toFixed(2)} km away</Text>
                     ) : null}
                     {selectedDoctor.experience ? (
@@ -701,7 +707,7 @@ export default function PatientMapScreen({ navigation, route }) {
                 {/* Reviews section (C) */}
                 {doctorRatings.length > 0 && (() => {
                   const avg = (field) => (doctorRatings.reduce((s, r) => s + (r[field] || 0), 0) / doctorRatings.length).toFixed(1);
-                  const comments = doctorRatings.filter(r => r.comment && r.isPublicComment === true);
+                  const comments = doctorRatings.filter(r => r.comment);
                   return (
                     <View style={styles.reviewsSection}>
                       <View style={styles.reviewsHeader}>

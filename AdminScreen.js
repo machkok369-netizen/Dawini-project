@@ -10,7 +10,9 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 
-const SUPER_ADMIN_UIDS = ["MQcjg6IlHUa0WTfDmfOxqzXcIbG3", "WGQ7mo55xmTBOuQrrTnN98XMI9C3"];
+const SUPER_ADMIN_UIDS = process.env.EXPO_PUBLIC_SUPER_ADMIN_UIDS
+  ? process.env.EXPO_PUBLIC_SUPER_ADMIN_UIDS.split(',').map((uid) => uid.trim()).filter(Boolean)
+  : ["MQcjg6IlHUa0WTfDmfOxqzXcIbG3", "WGQ7mo55xmTBOuQrrTnN98XMI9C3"];
 
 export default function AdminScreen({ navigation }) {
   const [currentTab, setCurrentTab] = useState('dashboard'); // dashboard, doctors, patients, reports, settings
@@ -72,7 +74,7 @@ export default function AdminScreen({ navigation }) {
       payload,
       status: 'pending',
       createdAt: serverTimestamp(),
-      requiresSuperAdminUid: SUPER_ADMIN_UIDS[0],
+      requiresSuperAdminUids: SUPER_ADMIN_UIDS,
     });
   };
 
@@ -601,7 +603,7 @@ export default function AdminScreen({ navigation }) {
           <View key={item.id} style={styles.suggestionCard}>
             <Text style={styles.suggestionText}>{item.text || 'No content'}</Text>
             <Text style={styles.suggestionMeta}>
-              {item.status || 'new'} · {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'pending date'}
+              {item.status || 'new'} · {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Date pending'}
             </Text>
           </View>
         ))}

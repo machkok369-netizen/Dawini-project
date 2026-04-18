@@ -94,7 +94,7 @@ export default function PatientOnboardingScreen({ navigation }) {
         relativeProfile: {
           name: relativeName.trim(),
           relation: relativeRelation.trim(),
-          age: relativeAge.trim() ? parseInt(relativeAge) : null,
+          age: relativeAge.trim() ? parseInt(relativeAge, 10) : null,
         },
         patientProfileCompleted: true,
         role: 'patient',

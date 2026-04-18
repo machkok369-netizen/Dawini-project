@@ -36,23 +36,29 @@ export default function PatientProfileScreen({ navigation }) {
   }, []);
 
   const saveProfile = async () => {
+    const parsedAge = parseInt(age, 10);
+    const parsedRelativeAge = relativeAge.trim() ? parseInt(relativeAge, 10) : null;
     if (!fullName.trim()) {
       Alert.alert('Missing Info', 'Name is required');
       return;
     }
-    if (!age.trim() || Number(age) < 1) {
+    if (!age.trim() || Number.isNaN(parsedAge) || parsedAge < 1) {
       Alert.alert('Invalid Age', 'Please enter a valid age');
+      return;
+    }
+    if (relativeAge.trim() && Number.isNaN(parsedRelativeAge)) {
+      Alert.alert('Invalid Relative Age', 'Please enter a valid relative age or leave it empty');
       return;
     }
     setSaving(true);
     try {
       await updateDoc(doc(db, 'users', auth.currentUser.uid), {
         fullName: fullName.trim(),
-        age: parseInt(age, 10),
+        age: parsedAge,
         relativeProfile: {
           name: relativeName.trim(),
           relation: relativeRelation.trim(),
-          age: relativeAge.trim() ? parseInt(relativeAge, 10) : null,
+          age: parsedRelativeAge,
         },
         profileUpdatedAt: new Date(),
       });
