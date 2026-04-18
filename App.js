@@ -3,17 +3,18 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import NotificationService from './NotificationService';
 
-import LoginScreen from './screens/LoginScreen';
-import RegisterScreen from './screens/RegisterScreen';
-import PatientOnboardingScreen from './screens/PatientOnboardingScreen';
-import DoctorListScreen from './screens/DoctorListScreen';
-import TrackingScreen from './screens/TrackingScreen';
-import EditProfileScreen from './screens/EditProfileScreen';
-import DoctorDashboardScreen from './screens/DoctorDashBoardScreen';
-import PatientMapScreen from './screens/Patientmapscreen';
-import AppointmentHistoryScreen from './screens/AppointmentHistoryScreen';
-import NotificationsScreen from './screens/NotificationsScreen';
-import AdminScreen from './screens/AdminScreen';
+import LoginScreen from './LoginScreen';
+import RegisterScreen from './RegisterScreen';
+import PatientOnboardingScreen from './PatientOnboardingScreen';
+import DoctorListScreen from './DoctorListScreen';
+import TrackingScreen from './TrackingScreen';
+import EditProfileScreen from './EditProfileScreen';
+import DoctorDashboardScreen from './DoctorDashBoardScreen';
+import PatientMapScreen from './Patientmapscreen';
+import AppointmentHistoryScreen from './AppointmentHistoryScreen';
+import NotificationsScreen from './NotificationsScreen';
+import AdminScreen from './AdminScreen';
+import PatientProfileScreen from './PatientProfileScreen';
 const Stack = createStackNavigator();
 
 export default function App() {
@@ -80,6 +81,12 @@ export default function App() {
           name="PatientMap"
           component={PatientMapScreen}
           options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="PatientProfile"
+          component={PatientProfileScreen}
+          options={{ title: 'My Profile' }}
         />
 
         <Stack.Screen

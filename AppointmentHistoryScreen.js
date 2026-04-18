@@ -3,8 +3,8 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, RefreshControl
 } from 'react-native';
-import { auth } from '../firebaseConfig';
-import AppointmentService from '../services/AppointmentService';
+import { auth } from './firebaseConfig';
+import AppointmentService from './AppointmentService';
 
 export default function AppointmentHistoryScreen({ navigation }) {
   const [appointments, setAppointments] = useState([]);

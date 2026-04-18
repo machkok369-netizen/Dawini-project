@@ -4,7 +4,7 @@ import {
   Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView
 } from 'react-native';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig';
+import { auth, db } from './firebaseConfig';
 
 export default function PatientOnboardingScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -14,6 +14,9 @@ export default function PatientOnboardingScreen({ navigation }) {
   const [age, setAge] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [relativeName, setRelativeName] = useState('');
+  const [relativeRelation, setRelativeRelation] = useState('');
+  const [relativeAge, setRelativeAge] = useState('');
 
   useEffect(() => {
     const initialize = async () => {
@@ -88,6 +91,11 @@ export default function PatientOnboardingScreen({ navigation }) {
         age: parseInt(age),
         phone: phone.trim(),
         email: email.trim() || auth.currentUser.email,
+        relativeProfile: {
+          name: relativeName.trim(),
+          relation: relativeRelation.trim(),
+          age: relativeAge.trim() ? parseInt(relativeAge) : null,
+        },
         patientProfileCompleted: true,
         role: 'patient',
         isVerified: true,
@@ -214,6 +222,50 @@ export default function PatientOnboardingScreen({ navigation }) {
                 onChangeText={setEmail}
                 placeholderTextColor="#cbd5e1"
                 autoCapitalize="none"
+                editable={!saving}
+              />
+            </View>
+          </View>
+
+          {/* Relative Info Section */}
+          <View style={styles.contactSection}>
+            <Text style={styles.contactTitle}>👨‍👩‍👧 Relative Information (Optional)</Text>
+            <Text style={styles.contactHint}>Save this if you often book for someone else</Text>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Relative Full Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Mother / Father name"
+                value={relativeName}
+                onChangeText={setRelativeName}
+                placeholderTextColor="#cbd5e1"
+                editable={!saving}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Relationship</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Mother, Father, Child"
+                value={relativeRelation}
+                onChangeText={setRelativeRelation}
+                placeholderTextColor="#cbd5e1"
+                editable={!saving}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Relative Age</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 62"
+                keyboardType="number-pad"
+                value={relativeAge}
+                onChangeText={setRelativeAge}
+                maxLength={3}
+                placeholderTextColor="#cbd5e1"
                 editable={!saving}
               />
             </View>

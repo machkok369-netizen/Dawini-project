@@ -1,8 +1,8 @@
 import {
   collection, addDoc, updateDoc, doc, getDocs, query, where,
-  serverTimestamp, increment, getDoc, orderBy, writeBatch, deleteDoc
+  serverTimestamp, increment, getDoc, orderBy, writeBatch, deleteDoc, setDoc, limit
 } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import NotificationService from './NotificationService';
 
 export class AppointmentService {
@@ -190,10 +190,33 @@ export class AppointmentService {
   // ✅ COMPLETE APPOINTMENT
   static async completeAppointment(appointmentId) {
     try {
-      await updateDoc(doc(db, 'reservations', appointmentId), {
+      const appointmentRef = doc(db, 'reservations', appointmentId);
+      const appointmentSnap = await getDoc(appointmentRef);
+      const appointmentData = appointmentSnap.exists() ? appointmentSnap.data() : null;
+
+      await updateDoc(appointmentRef, {
         status: 'completed',
         completedAt: serverTimestamp(),
       });
+
+      if (appointmentData?.doctorId) {
+        await setDoc(doc(db, 'doctor_earnings', appointmentData.doctorId), {
+          doctorId: appointmentData.doctorId,
+          totalCompletedAppointments: increment(1),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        await addDoc(collection(db, 'payment_transactions'), {
+          doctorId: appointmentData.doctorId,
+          appointmentId,
+          amount: appointmentData.visitCost || 0,
+          status: 'pending_bank_transfer',
+          paymentMethod: 'el_dahabya_placeholder',
+          createdAt: serverTimestamp(),
+          integrationNote: 'Reserved for El Dahabya bank integration',
+        });
+      }
+
       return { success: true };
     } catch (error) {
       console.log("Complete appointment error:", error);

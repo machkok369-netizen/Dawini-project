@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  ScrollView, Modal, Image, Alert, ActivityIndicator, FlatList, Linking
+  ScrollView, Modal, Image, Alert, ActivityIndicator
 } from 'react-native';
-import MapView, { Marker, Callout } from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import {
   collection, query, where, getDocs, addDoc,
   serverTimestamp, doc, getDoc, updateDoc, increment,
-  onSnapshot, orderBy, limit
+  onSnapshot
 } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -32,6 +32,20 @@ const normalizeText = (str = '') =>
   str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 const dateKey = (d) => d.toISOString().split('T')[0];
+const EARTH_RADIUS_KM = 6371;
+const DISCOVERY_RADIUS_KM = 3;
+
+const toRad = (deg) => (deg * Math.PI) / 180;
+const calculateDistanceKm = (from, to) => {
+  if (!from || !to) return Number.POSITIVE_INFINITY;
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(from.latitude))
+    * Math.cos(toRad(to.latitude))
+    * Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_KM * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
 
 const REVIEW_CATEGORIES = [
   { label: 'Overall',     field: 'overall' },
@@ -42,7 +56,6 @@ const REVIEW_CATEGORIES = [
 
 export default function PatientMapScreen({ navigation, route }) {
   const isDoctor = route?.params?.isDoctor || false;
-  const userLocation = route?.params?.userLocation || null;
 
   const [doctors, setDoctors]           = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -58,13 +71,17 @@ export default function PatientMapScreen({ navigation, route }) {
   const [bookingTime, setBookingTime]   = useState('');
   const [bookingNote, setBookingNote]   = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [patientProfile, setPatientProfile] = useState(null);
+  const [bookForRelative, setBookForRelative] = useState(false);
+  const [bookingRelativeName, setBookingRelativeName] = useState('');
+  const [bookingRelativeRelation, setBookingRelativeRelation] = useState('');
+  const [bookingRelativeAge, setBookingRelativeAge] = useState('');
 
   // Upcoming appointment banner (A)
   const [upcomingAppointment, setUpcomingAppointment] = useState(null);
 
   // Doctor ratings (C)
   const [doctorRatings, setDoctorRatings] = useState([]);
-  const [ratingsLoading, setRatingsLoading] = useState(false);
 
   // Rating
   const [ratingVisible, setRatingVisible] = useState(false);
@@ -73,6 +90,11 @@ export default function PatientMapScreen({ navigation, route }) {
   const [ratingAttitude, setRatingAttitude] = useState(0);
   const [ratingCleanliness, setRatingCleanliness] = useState(0);
   const [ratingComment, setRatingComment] = useState('');
+
+  // Suggestions
+  const [suggestionVisible, setSuggestionVisible] = useState(false);
+  const [suggestionText, setSuggestionText] = useState('');
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   const mapRef = useRef(null);
 
@@ -109,6 +131,15 @@ export default function PatientMapScreen({ navigation, route }) {
         const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'doctor'), where('profileCompleted', '==', true)));
         const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setDoctors(docs);
+
+        const userSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (userSnap.exists()) {
+          const profile = userSnap.data();
+          setPatientProfile(profile);
+          setBookingRelativeName(profile.relativeProfile?.name || '');
+          setBookingRelativeRelation(profile.relativeProfile?.relation || '');
+          setBookingRelativeAge(profile.relativeProfile?.age ? String(profile.relativeProfile.age) : '');
+        }
       } catch (e) {
         console.log('Map init error:', e);
         Alert.alert('Connection Error', 'Could not load doctor data. Please check your internet connection and restart the app.');
@@ -171,7 +202,6 @@ export default function PatientMapScreen({ navigation, route }) {
   useEffect(() => {
     if (!selectedDoctor) { setDoctorRatings([]); return; }
     const fetchRatings = async () => {
-      setRatingsLoading(true);
       try {
         const snap = await getDocs(query(
           collection(db, 'ratings'),
@@ -183,13 +213,12 @@ export default function PatientMapScreen({ navigation, route }) {
             ...d.data(),
             createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(),
           }))
+          .filter(r => r.isPublicComment !== false)
           .sort((a, b) => b.createdAt - a.createdAt);
         setDoctorRatings(ratings);
       } catch (e) {
         console.log('Fetch ratings error:', e);
         setDoctorRatings([]);
-      } finally {
-        setRatingsLoading(false);
       }
     };
     fetchRatings();
@@ -197,16 +226,61 @@ export default function PatientMapScreen({ navigation, route }) {
 
   // ── Filtered doctors ──────────────────────────────────────────────────────────
   const filteredDoctors = useMemo(() => {
-    return doctors.filter(d => {
-      const matchSearch = !searchQuery.trim() ||
-        normalizeText(d.fullName).includes(normalizeText(searchQuery)) ||
-        normalizeText(d.specialty).includes(normalizeText(searchQuery)) ||
-        normalizeText(d.cabinetName || '').includes(normalizeText(searchQuery));
-      const matchFilter = selectedFilter === 'All' ||
-        normalizeText(d.specialty).includes(normalizeText(selectedFilter));
-      return matchSearch && matchFilter && d.location;
-    });
-  }, [doctors, searchQuery, selectedFilter]);
+    const qNorm = normalizeText(searchQuery);
+    return doctors
+      .filter(d => d.location)
+      .map(d => ({
+        ...d,
+        distanceKm: myLocation ? calculateDistanceKm(myLocation, d.location) : null,
+      }))
+      .filter(d => {
+        const matchSearch = !qNorm
+          || normalizeText(d.fullName).includes(qNorm)
+          || normalizeText(d.specialty).includes(qNorm)
+          || normalizeText(d.cabinetName || '').includes(qNorm);
+        const matchFilter = selectedFilter === 'All'
+          || normalizeText(d.specialty).includes(normalizeText(selectedFilter));
+        const withinRadius = myLocation ? d.distanceKm <= DISCOVERY_RADIUS_KM : true;
+        return matchSearch && matchFilter && withinRadius;
+      })
+      .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
+  }, [doctors, searchQuery, selectedFilter, myLocation]);
+
+  const getRatingEligibility = async () => {
+    if (!selectedDoctor) return { allowed: false, reason: 'Choose a doctor first.' };
+    const uid = auth.currentUser.uid;
+    const reservationsSnap = await getDocs(query(
+      collection(db, 'reservations'),
+      where('doctorId', '==', selectedDoctor.id),
+      where('patientId', '==', uid),
+      where('status', '==', 'completed')
+    ));
+    if (reservationsSnap.empty) {
+      return { allowed: false, reason: 'You can rate only after a completed appointment.' };
+    }
+    const ratingsSnap = await getDocs(query(
+      collection(db, 'ratings'),
+      where('doctorId', '==', selectedDoctor.id),
+      where('patientId', '==', uid)
+    ));
+    const ratedAppointmentIds = new Set(
+      ratingsSnap.docs.map(r => r.data().appointmentId).filter(Boolean)
+    );
+    const now = new Date();
+    const eligible = reservationsSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .find((appointment) => {
+        const appointmentDate = appointment.date?.toDate ? appointment.date.toDate() : new Date(appointment.date);
+        const afterCutoff = new Date(appointmentDate);
+        afterCutoff.setHours(18, 0, 0, 0);
+        return now >= afterCutoff && !ratedAppointmentIds.has(appointment.id);
+      });
+
+    if (!eligible) {
+      return { allowed: false, reason: 'Rating opens after 18:00 on your completed appointment day.' };
+    }
+    return { allowed: true, appointmentId: eligible.id };
+  };
 
   // ── Handle pin tap ────────────────────────────────────────────────────────────
   const handlePinTap = (doctor) => {
@@ -226,6 +300,10 @@ export default function PatientMapScreen({ navigation, route }) {
       Alert.alert('Missing', 'Please enter a preferred time.');
       return;
     }
+    if (bookForRelative && !bookingRelativeName.trim()) {
+      Alert.alert('Missing', 'Please enter relative name for this booking.');
+      return;
+    }
     setBookingLoading(true);
     try {
       const uid = auth.currentUser.uid;
@@ -240,9 +318,15 @@ export default function PatientMapScreen({ navigation, route }) {
         patientId: uid,
         doctorName: selectedDoctor.fullName || selectedDoctor.name || 'Doctor',
         doctorLocation: selectedDoctor.location || null,
-        patientName: userData?.fullName || 'Patient', // ← Auto-filled
-        patientPhone: userData?.phone || '', // ← Auto-filled
-        patientAge: userData?.age || null, // ← New field
+        patientName: userData?.fullName || 'Patient',
+        patientPhone: userData?.phone || '',
+        patientAge: userData?.age || null,
+        bookingFor: bookForRelative ? 'relative' : 'self',
+        bookedForName: bookForRelative ? bookingRelativeName.trim() : (userData?.fullName || 'Patient'),
+        bookedForRelation: bookForRelative ? bookingRelativeRelation.trim() : 'self',
+        bookedForAge: bookForRelative
+          ? (bookingRelativeAge.trim() ? parseInt(bookingRelativeAge, 10) : null)
+          : (userData?.age || null),
         date: new Date(),
         time: bookingTime,
         note: bookingNote,
@@ -266,6 +350,7 @@ export default function PatientMapScreen({ navigation, route }) {
       setBookingVisible(false);
       setBookingTime('');
       setBookingNote('');
+      setBookForRelative(false);
     } catch (e) {
       Alert.alert('Error', 'Could not complete booking. Try again.');
     } finally {
@@ -275,6 +360,11 @@ export default function PatientMapScreen({ navigation, route }) {
 
   // ── Submit rating ─────────────────────────────────────────────────────────────
   const handleRating = async () => {
+    const eligibility = await getRatingEligibility();
+    if (!eligibility.allowed) {
+      Alert.alert('Not Allowed Yet', eligibility.reason);
+      return;
+    }
     if (ratingStars === 0) {
       Alert.alert('Missing', 'Please give at least an overall star rating.');
       return;
@@ -288,6 +378,8 @@ export default function PatientMapScreen({ navigation, route }) {
         attitude: ratingAttitude,
         cleanliness: ratingCleanliness,
         comment: ratingComment,
+        appointmentId: eligibility.appointmentId,
+        isPublicComment: true,
         createdAt: serverTimestamp(),
       });
       Alert.alert('Thank you!', 'Your review has been submitted.');
@@ -299,36 +391,45 @@ export default function PatientMapScreen({ navigation, route }) {
     }
   };
 
-  // ── Get directions via device maps app (B) ────────────────────────────────────
-  const handleGetDirections = (doctor) => {
-    if (!doctor?.location) { Alert.alert('Location unavailable', 'This doctor has no location set.'); return; }
-    const { latitude, longitude } = doctor.location;
-    const label = encodeURIComponent(`Dr. ${doctor.fullName}`);
-    const url = `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`;
-    Linking.openURL(url).catch(() => {
-      // Fallback to Google Maps web URL
-      Linking.openURL(`https://maps.google.com/?q=${latitude},${longitude}`);
-    });
+  const handleGoNow = (doctor) => {
+    if (!doctor?.location) {
+      Alert.alert('Location unavailable', 'This doctor has no location set.');
+      return;
+    }
+    navigation.navigate('Tracking', { doctor });
   };
 
-  // ── On My Way: open directions + notify doctor (E) ───────────────────────────
-  const handleOnMyWay = async (doctor) => {
-    handleGetDirections(doctor);
+  const openRatingModal = async () => {
+    const eligibility = await getRatingEligibility();
+    if (!eligibility.allowed) {
+      Alert.alert('Not Allowed Yet', eligibility.reason);
+      return;
+    }
+    setCardVisible(false);
+    setRatingVisible(true);
+  };
+
+  const submitSuggestion = async () => {
+    if (!suggestionText.trim()) {
+      Alert.alert('Missing', 'Please write your suggestion first.');
+      return;
+    }
+    setSuggestionLoading(true);
     try {
-      const uid = auth.currentUser?.uid;
-      const userSnap = await getDoc(doc(db, 'users', uid));
-      const patientName = userSnap.data()?.fullName || 'A patient';
-      await addDoc(collection(db, 'notifications'), {
-        userId: doctor.id,
-        type: 'patient_on_way',
-        title: '🚀 Patient On The Way',
-        message: `${patientName} is heading to your clinic`,
-        patientId: uid,
-        read: false,
+      await addDoc(collection(db, 'suggestions'), {
+        userId: auth.currentUser.uid,
+        text: suggestionText.trim(),
+        source: 'patient_map',
+        status: 'new',
         createdAt: serverTimestamp(),
       });
+      Alert.alert('Thank you!', 'Your suggestion has been recorded.');
+      setSuggestionText('');
+      setSuggestionVisible(false);
     } catch (e) {
-      console.log('On My Way notify error:', e);
+      Alert.alert('Error', 'Could not save suggestion.');
+    } finally {
+      setSuggestionLoading(false);
     }
   };
 
@@ -427,8 +528,36 @@ export default function PatientMapScreen({ navigation, route }) {
 
       {/* ── Results count ── */}
       <View style={styles.countBadge}>
-        <Text style={styles.countText}>{filteredDoctors.length} clinics nearby</Text>
+        <Text style={styles.countText}>
+          {filteredDoctors.length} doctors within {DISCOVERY_RADIUS_KM}km
+        </Text>
       </View>
+
+      {/* ── Nearby doctors list (closest → farthest) ── */}
+      <View style={styles.nearbyListWrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.nearbyListContent}>
+          {filteredDoctors.map((doctor) => (
+            <TouchableOpacity key={doctor.id} style={styles.nearbyChip} onPress={() => handlePinTap(doctor)}>
+              <Text style={styles.nearbyChipTitle} numberOfLines={1}>Dr. {doctor.fullName}</Text>
+              <Text style={styles.nearbyChipSub} numberOfLines={1}>
+                {doctor.specialty} {doctor.distanceKm !== null && doctor.distanceKm !== undefined ? `· ${doctor.distanceKm.toFixed(2)}km` : ''}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {!isDoctor && (
+        <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('PatientProfile')}>
+          <Text style={styles.profileBtnText}>👤</Text>
+        </TouchableOpacity>
+      )}
+
+      {!isDoctor && (
+        <TouchableOpacity style={styles.suggestionBtn} onPress={() => setSuggestionVisible(true)}>
+          <Text style={styles.suggestionBtnText}>💡</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ── Upcoming appointment banner (A) ── */}
       {upcomingAppointment && (
@@ -452,7 +581,7 @@ export default function PatientMapScreen({ navigation, route }) {
           {upcomingAppointment.doctorLocation && (
             <TouchableOpacity
               style={styles.apptBannerNav}
-              onPress={() => handleGetDirections({ location: upcomingAppointment.doctorLocation, fullName: upcomingAppointment.doctorName })}
+              onPress={() => handleGoNow({ location: upcomingAppointment.doctorLocation, fullName: upcomingAppointment.doctorName })}
             >
               <Text style={styles.apptBannerNavText}>🗺️</Text>
             </TouchableOpacity>
@@ -481,10 +610,18 @@ export default function PatientMapScreen({ navigation, route }) {
                     </View>
                   )}
                   <View style={styles.cardInfo}>
-                    <Text style={styles.cardName}>Dr. {selectedDoctor.fullName}</Text>
+                    <View style={styles.cardTopRow}>
+                      <Text style={styles.cardName}>Dr. {selectedDoctor.fullName}</Text>
+                      <View style={styles.cardRatingBadge}>
+                        <Text style={styles.cardRatingText}>⭐ {selectedDoctor.averageRating || '0.0'}</Text>
+                      </View>
+                    </View>
                     {selectedDoctor.fullNameAr ? <Text style={styles.cardNameAr}>{selectedDoctor.fullNameAr}</Text> : null}
                     <Text style={styles.cardSpecialty}>{selectedDoctor.specialty}</Text>
                     <Text style={styles.cardCabinet}>{selectedDoctor.cabinetName}</Text>
+                    {selectedDoctor.distanceKm !== null && selectedDoctor.distanceKm !== undefined ? (
+                      <Text style={styles.cardDistance}>📍 {selectedDoctor.distanceKm.toFixed(2)} km away</Text>
+                    ) : null}
                     {selectedDoctor.experience ? (
                       <Text style={styles.cardExperience}>🎓 {selectedDoctor.experience} yrs experience</Text>
                     ) : null}
@@ -520,11 +657,6 @@ export default function PatientMapScreen({ navigation, route }) {
                       {selectedDoctor.averageRating ? `${selectedDoctor.averageRating}★` : '—'}
                     </Text>
                     <Text style={styles.cardStatLabel}>Rating</Text>
-                  </View>
-                  <View style={styles.cardStatDivider} />
-                  <View style={styles.cardStat}>
-                    <Text style={styles.cardStatValue} numberOfLines={1}>{selectedDoctor.phone || '—'}</Text>
-                    <Text style={styles.cardStatLabel}>Phone</Text>
                   </View>
                 </View>
 
@@ -569,7 +701,7 @@ export default function PatientMapScreen({ navigation, route }) {
                 {/* Reviews section (C) */}
                 {doctorRatings.length > 0 && (() => {
                   const avg = (field) => (doctorRatings.reduce((s, r) => s + (r[field] || 0), 0) / doctorRatings.length).toFixed(1);
-                  const comments = doctorRatings.filter(r => r.comment);
+                  const comments = doctorRatings.filter(r => r.comment && r.isPublicComment === true);
                   return (
                     <View style={styles.reviewsSection}>
                       <View style={styles.reviewsHeader}>
@@ -603,9 +735,9 @@ export default function PatientMapScreen({ navigation, route }) {
                     {/* Get Directions button (B) */}
                     <TouchableOpacity
                       style={styles.directionsBtn}
-                      onPress={() => handleGetDirections(selectedDoctor)}
+                      onPress={() => handleGoNow(selectedDoctor)}
                     >
-                      <Text style={styles.directionsBtnText}>🗺️ Get Directions</Text>
+                      <Text style={styles.directionsBtnText}>🗺️ Go Now</Text>
                     </TouchableOpacity>
 
                     {/* Book appointment button */}
@@ -614,7 +746,7 @@ export default function PatientMapScreen({ navigation, route }) {
                         style={styles.bookBtn}
                         onPress={() => { setCardVisible(false); setBookingVisible(true); }}
                       >
-                        <Text style={styles.bookBtnText}>📅 Book an Appointment</Text>
+                        <Text style={styles.bookBtnText}>📅 Make Appointment</Text>
                       </TouchableOpacity>
                     ) : (
                       <View style={styles.bookBtnDisabled}>
@@ -624,18 +756,10 @@ export default function PatientMapScreen({ navigation, route }) {
                       </View>
                     )}
 
-                    {/* On My Way — notify doctor (E) */}
-                    <TouchableOpacity
-                      style={styles.onMyWayBtn}
-                      onPress={() => { setCardVisible(false); handleOnMyWay(selectedDoctor); }}
-                    >
-                      <Text style={styles.onMyWayBtnText}>🚀 On My Way — Notify Doctor</Text>
-                    </TouchableOpacity>
-
                     {/* Rate & Review */}
                     <TouchableOpacity
                       style={styles.rateBtn}
-                      onPress={() => { setCardVisible(false); setRatingVisible(true); }}
+                      onPress={openRatingModal}
                     >
                       <Text style={styles.rateBtnText}>⭐ Rate & Review</Text>
                     </TouchableOpacity>
@@ -654,6 +778,49 @@ export default function PatientMapScreen({ navigation, route }) {
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Book Appointment</Text>
             <Text style={styles.modalSub}>Dr. {selectedDoctor?.fullName} · {selectedDoctor?.cabinetName}</Text>
+
+            <View style={styles.bookingProfileBox}>
+              <Text style={styles.bookingProfileTitle}>Booking Profile</Text>
+              <Text style={styles.bookingProfileText}>Name: {patientProfile?.fullName || '—'}</Text>
+              <Text style={styles.bookingProfileText}>Age: {patientProfile?.age || '—'}</Text>
+              <View style={styles.bookingForSwitchRow}>
+                <TouchableOpacity
+                  style={[styles.bookingForBtn, !bookForRelative && styles.bookingForBtnActive]}
+                  onPress={() => setBookForRelative(false)}
+                >
+                  <Text style={[styles.bookingForBtnText, !bookForRelative && styles.bookingForBtnTextActive]}>For Me</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bookingForBtn, bookForRelative && styles.bookingForBtnActive]}
+                  onPress={() => setBookForRelative(true)}
+                >
+                  <Text style={[styles.bookingForBtnText, bookForRelative && styles.bookingForBtnTextActive]}>For Relative</Text>
+                </TouchableOpacity>
+              </View>
+              {bookForRelative && (
+                <>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Relative name"
+                    value={bookingRelativeName}
+                    onChangeText={setBookingRelativeName}
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Relationship (mother, child...)"
+                    value={bookingRelativeRelation}
+                    onChangeText={setBookingRelativeRelation}
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Relative age"
+                    value={bookingRelativeAge}
+                    onChangeText={setBookingRelativeAge}
+                    keyboardType="number-pad"
+                  />
+                </>
+              )}
+            </View>
 
             <Text style={styles.modalLabel}>Preferred Time</Text>
             <TextInput
@@ -727,6 +894,29 @@ export default function PatientMapScreen({ navigation, route }) {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* ── Suggestion modal ── */}
+      <Modal visible={suggestionVisible} transparent animationType="slide" onRequestClose={() => setSuggestionVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Suggestion Box</Text>
+            <Text style={styles.modalSub}>Help us improve Dawini</Text>
+            <TextInput
+              style={[styles.modalInput, { height: 110 }]}
+              multiline
+              placeholder="Write your suggestion..."
+              value={suggestionText}
+              onChangeText={setSuggestionText}
+            />
+            <TouchableOpacity style={styles.modalBtn} onPress={submitSuggestion} disabled={suggestionLoading}>
+              {suggestionLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalBtnText}>Send Suggestion</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setSuggestionVisible(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -755,6 +945,33 @@ const styles = StyleSheet.create({
   // Count badge
   countBadge: { position: 'absolute', bottom: 32, left: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 14 },
   countText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  nearbyListWrap: { position: 'absolute', bottom: 150, left: 0, right: 0 },
+  nearbyListContent: { paddingHorizontal: 12, gap: 8 },
+  nearbyChip: { width: 180, backgroundColor: '#fff', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  nearbyChipTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  nearbyChipSub: { fontSize: 11, color: '#64748b', marginTop: 3 },
+  profileBtn: {
+    position: 'absolute',
+    top: 170,
+    right: 16,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    elevation: 6,
+  },
+  profileBtnText: { fontSize: 16 },
+  suggestionBtn: {
+    position: 'absolute',
+    top: 224,
+    right: 16,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    elevation: 6,
+  },
+  suggestionBtnText: { fontSize: 16 },
 
   // Back button
   backBtn: { 
@@ -789,10 +1006,14 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', gap: 14, marginBottom: 16 },
   cardPhoto: { width: 80, height: 80, borderRadius: 16 },
   cardInfo: { flex: 1 },
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardName: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  cardRatingBadge: { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 },
+  cardRatingText: { color: '#b45309', fontSize: 12, fontWeight: '700' },
   cardNameAr: { fontSize: 14, color: '#374151', textAlign: 'right', marginTop: 2 },
   cardSpecialty: { fontSize: 14, color: '#6b7280', marginTop: 3 },
   cardCabinet: { fontSize: 13, color: '#9ca3af', marginTop: 2 },
+  cardDistance: { fontSize: 12, color: '#059669', marginTop: 4, fontWeight: '600' },
   cardStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   cardStatusDot: { width: 8, height: 8, borderRadius: 4 },
   cardStatusText: { fontSize: 13, fontWeight: '600' },
@@ -821,6 +1042,14 @@ const styles = StyleSheet.create({
   modalSub: { fontSize: 14, color: '#6b7280', marginBottom: 20 },
   modalLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6, marginTop: 10 },
   modalInput: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 14, fontSize: 15, backgroundColor: '#fafafa', marginBottom: 4 },
+  bookingProfileBox: { backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', padding: 12, marginBottom: 8 },
+  bookingProfileTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
+  bookingProfileText: { fontSize: 12, color: '#475569', marginBottom: 2 },
+  bookingForSwitchRow: { flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 8 },
+  bookingForBtn: { flex: 1, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 8, alignItems: 'center', backgroundColor: '#fff' },
+  bookingForBtnActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  bookingForBtnText: { color: '#334155', fontWeight: '600', fontSize: 12 },
+  bookingForBtnTextActive: { color: '#fff' },
   autoAcceptBadge: { backgroundColor: '#f0fdf4', borderRadius: 10, padding: 10, marginVertical: 10 },
   autoAcceptText: { color: '#16a34a', fontSize: 13, fontWeight: '600', textAlign: 'center' },
   manualBadge: { backgroundColor: '#fef3c7', borderRadius: 10, padding: 10, marginVertical: 10 },

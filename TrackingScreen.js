@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import { StyleSheet, View } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import * as Location from 'expo-location';
+import { db } from './firebaseConfig';
 
-export default function TrackingScreen() {
-  // 1. We start with a default location (center of town)
+export default function TrackingScreen({ route }) {
+  const targetDoctor = route?.params?.doctor || null;
+  const [patientLocation, setPatientLocation] = useState(null);
+
   const [doctorLocation, setDoctorLocation] = useState({
-    latitude: 36.26, // Change to your city's lat
-    longitude: 6.63, // Change to your city's lng
+    latitude: targetDoctor?.location?.latitude || 36.26,
+    longitude: targetDoctor?.location?.longitude || 6.63,
   });
 
   useEffect(() => {
-    // 2. This "Listens" to Firebase. Every time the doctor's GPS moves,
-    // this function fires and updates the map automatically!
-    const unsub = onSnapshot(
+    if (targetDoctor?.location) return undefined;
+
+    const unsubListener = onSnapshot(
       doc(db, "active_trips", "trip_001"),
       (docSnap) => {
         if (docSnap.exists()) {
@@ -30,7 +33,22 @@ export default function TrackingScreen() {
       }
     );
 
-    return () => unsub();
+    return () => unsubListener();
+  }, [targetDoctor]);
+
+  useEffect(() => {
+    const loadLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const loc = await Location.getCurrentPositionAsync({});
+        setPatientLocation({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+      } catch (e) {}
+    };
+    loadLocation();
   }, []);
 
   return (
@@ -38,17 +56,23 @@ export default function TrackingScreen() {
       <MapView 
         style={styles.map} 
         region={{
-          ...doctorLocation,
+          ...(patientLocation || doctorLocation),
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         }}
       >
-        {/* 3. The Marker represents the Doctor */}
         <Marker 
           coordinate={doctorLocation} 
-          title="Le Docteur arrive 🏎️"
-          description="Votre aide est en chemin"
+          title={targetDoctor?.fullName ? `Dr. ${targetDoctor.fullName}` : "Doctor"}
+          description="Doctor destination"
         />
+        {patientLocation && (
+          <Marker
+            coordinate={patientLocation}
+            title="You"
+            pinColor="green"
+          />
+        )}
       </MapView>
     </View>
   );

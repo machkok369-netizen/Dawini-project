@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 
 import { collection, query, onSnapshot, doc, updateDoc, serverTimestamp, getDoc, where } from 'firebase/firestore'; 
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import * as Location from 'expo-location';
 
 const emojiMap = {

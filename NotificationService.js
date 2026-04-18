@@ -2,7 +2,7 @@ import {
   collection, addDoc, serverTimestamp, updateDoc, doc, getDoc,
   getDocs, query, where, orderBy, limit, writeBatch
 } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 

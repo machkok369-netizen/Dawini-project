@@ -9,7 +9,7 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, auth, storage } from '../firebaseConfig';
+import { db, auth, storage } from './firebaseConfig';
 
 const SPECIALTIES = [
   'General Practitioner', 'Dentist', 'Cardiologist', 'Pediatrician',

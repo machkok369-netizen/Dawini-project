@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, FlatList, Modal, TextInput,
+  ActivityIndicator, Alert, Modal,
   RefreshControl
 } from 'react-native';
 import {
   collection, query, where, getDocs, updateDoc, doc,
-  getDoc, deleteDoc, writeBatch, orderBy, onSnapshot
+  getDoc, deleteDoc, writeBatch, addDoc, serverTimestamp, setDoc
 } from 'firebase/firestore';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 
-const ADMIN_UID = "MQcjg6IlHUa0WTfDmfOxqzXcIbG3";
+const SUPER_ADMIN_UIDS = ["MQcjg6IlHUa0WTfDmfOxqzXcIbG3", "WGQ7mo55xmTBOuQrrTnN98XMI9C3"];
 
 export default function AdminScreen({ navigation }) {
   const [currentTab, setCurrentTab] = useState('dashboard'); // dashboard, doctors, patients, reports, settings
@@ -38,16 +38,43 @@ export default function AdminScreen({ navigation }) {
 
   // Reports
   const [reportData, setReportData] = useState(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
 
   // Check if user is admin
   useEffect(() => {
-    if (auth.currentUser?.uid !== ADMIN_UID) {
-      Alert.alert('Access Denied', 'You are not an admin');
-      navigation.goBack();
-      return;
-    }
-    loadDashboardData();
+    const checkAdminAccess = async () => {
+      try {
+        const uid = auth.currentUser?.uid;
+        const userSnap = await getDoc(doc(db, 'users', uid));
+        const userData = userSnap.exists() ? userSnap.data() : {};
+        const superAdmin = SUPER_ADMIN_UIDS.includes(uid) || userData.adminRole === 'super_admin';
+        const admin = superAdmin || userData.role === 'admin' || userData.isAdmin === true;
+        if (!admin) {
+          Alert.alert('Access Denied', 'You are not an admin');
+          navigation.goBack();
+          return;
+        }
+        setIsSuperAdmin(superAdmin);
+        loadDashboardData();
+      } catch (e) {
+        Alert.alert('Error', 'Could not verify admin access');
+        navigation.goBack();
+      }
+    };
+    checkAdminAccess();
   }, []);
+
+  const createApprovalRequest = async (type, payload = {}) => {
+    await addDoc(collection(db, 'admin_approval_requests'), {
+      requestedBy: auth.currentUser.uid,
+      type,
+      payload,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      requiresSuperAdminUid: SUPER_ADMIN_UIDS[0],
+    });
+  };
 
   // ==========================================
   // 📊 DASHBOARD DATA
@@ -92,6 +119,7 @@ export default function AdminScreen({ navigation }) {
 
       // Total ratings
       const ratingsSnap = await getDocs(collection(db, 'ratings'));
+      const suggestionSnap = await getDocs(query(collection(db, 'suggestions')));
 
       setStats({
         totalDoctors: allDoctors.length,
@@ -105,6 +133,7 @@ export default function AdminScreen({ navigation }) {
       setDoctors(allDoctors);
       setPendingDoctors(pendingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setPatients(patientsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSuggestions(suggestionSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
     } catch (e) {
       console.log('Load dashboard error:', e);
@@ -125,6 +154,12 @@ export default function AdminScreen({ navigation }) {
   // ==========================================
   const verifyDoctor = async () => {
     if (!selectedDoctor) return;
+    if (!isSuperAdmin) {
+      await createApprovalRequest('verify_doctor', { doctorId: selectedDoctor.id });
+      Alert.alert('Approval Required', 'Verification request sent to super admin.');
+      setVerifyModalVisible(false);
+      return;
+    }
 
     try {
       const endDate = new Date();
@@ -150,6 +185,11 @@ export default function AdminScreen({ navigation }) {
   // ❌ REJECT DOCTOR
   // ==========================================
   const rejectDoctor = async (doctorId) => {
+    if (!isSuperAdmin) {
+      createApprovalRequest('delete_doctor', { doctorId });
+      Alert.alert('Approval Required', 'Delete request sent to super admin.');
+      return;
+    }
     Alert.alert(
       'Reject Doctor',
       'Are you sure? This will delete their account.',
@@ -176,6 +216,11 @@ export default function AdminScreen({ navigation }) {
   // 🚫 SUSPEND/BAN USER
   // ==========================================
   const suspendUser = async (userId, reason) => {
+    if (!isSuperAdmin) {
+      await createApprovalRequest('suspend_user', { userId, reason });
+      Alert.alert('Approval Required', 'Suspend request sent to super admin.');
+      return;
+    }
     try {
       await updateDoc(doc(db, "users", userId), {
         isSuspended: true,
@@ -240,6 +285,11 @@ export default function AdminScreen({ navigation }) {
   // 🧹 CLEANUP OLD DATA
   // ==========================================
   const cleanupOldData = async () => {
+    if (!isSuperAdmin) {
+      await createApprovalRequest('cleanup_old_data', {});
+      Alert.alert('Approval Required', 'Cleanup request sent to super admin.');
+      return;
+    }
     Alert.alert(
       'Cleanup Data',
       'Delete notifications and cancelled appointments older than 30 days?',
@@ -517,15 +567,69 @@ export default function AdminScreen({ navigation }) {
     </ScrollView>
   );
 
+  const initializePaymentPlaceholder = async () => {
+    if (!isSuperAdmin) {
+      await createApprovalRequest('init_payment_placeholder', {});
+      Alert.alert('Approval Required', 'Payment setup request sent to super admin.');
+      return;
+    }
+    try {
+      await setDoc(doc(db, 'payment_config', 'el_dahabya'), {
+        enabled: false,
+        status: 'placeholder',
+        provider: 'el_dahabya',
+        integrationPoints: [
+          'bank_account_linking',
+          'transfer_confirmation_webhook',
+          'daily_settlement_reconciliation',
+        ],
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      Alert.alert('Ready', 'El Dahabya payment placeholder initialized.');
+    } catch (e) {
+      Alert.alert('Error', 'Could not initialize payment placeholder.');
+    }
+  };
+
+  const renderSuggestions = () => (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>💡 Suggestion Box ({suggestions.length})</Text>
+        {suggestions.length === 0 ? (
+          <Text style={styles.emptyText}>No suggestions yet</Text>
+        ) : suggestions.map((item) => (
+          <View key={item.id} style={styles.suggestionCard}>
+            <Text style={styles.suggestionText}>{item.text || 'No content'}</Text>
+            <Text style={styles.suggestionMeta}>
+              {item.status || 'new'} · {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'pending date'}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+
   const renderSettings = () => (
     <ScrollView>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Admin Settings</Text>
+        <View style={styles.permissionBadge}>
+          <Text style={styles.permissionBadgeText}>
+            {isSuperAdmin ? 'Super Admin: full control' : 'Limited Admin: changes require super admin approval'}
+          </Text>
+        </View>
 
         <TouchableOpacity style={styles.settingItem} onPress={cleanupOldData}>
           <View>
             <Text style={styles.settingTitle}>🧹 Cleanup Data</Text>
             <Text style={styles.settingDesc}>Delete old notifications & appointments</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.settingItem} onPress={initializePaymentPlaceholder}>
+          <View>
+            <Text style={styles.settingTitle}>💳 El Dahabya Payment Placeholder</Text>
+            <Text style={styles.settingDesc}>Prepare Firestore structure for bank integration</Text>
           </View>
         </TouchableOpacity>
 
@@ -567,7 +671,7 @@ export default function AdminScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🛡️ Admin Panel</Text>
-        <Text style={styles.headerSubtitle}>Manage Dawini</Text>
+        <Text style={styles.headerSubtitle}>{isSuperAdmin ? 'Super admin control center' : 'Admin panel (approval required for critical changes)'}</Text>
       </View>
 
       {/* Tabs */}
@@ -602,6 +706,13 @@ export default function AdminScreen({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={[styles.tab, currentTab === 'suggestions' && styles.tabActive]}
+          onPress={() => setCurrentTab('suggestions')}
+        >
+          <Text style={[styles.tabText, currentTab === 'suggestions' && styles.tabTextActive]}>Suggestions</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.tab, currentTab === 'settings' && styles.tabActive]}
           onPress={() => setCurrentTab('settings')}
         >
@@ -615,6 +726,7 @@ export default function AdminScreen({ navigation }) {
         {currentTab === 'doctors' && renderDoctors()}
         {currentTab === 'patients' && renderPatients()}
         {currentTab === 'reports' && renderReports()}
+        {currentTab === 'suggestions' && renderSuggestions()}
         {currentTab === 'settings' && renderSettings()}
       </View>
 
@@ -977,6 +1089,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     marginTop: 3,
+  },
+  permissionBadge: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  permissionBadgeText: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  suggestionCard: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 8,
+    backgroundColor: '#f8fafc',
+  },
+  suggestionText: {
+    fontSize: 13,
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  suggestionMeta: {
+    fontSize: 11,
+    color: '#64748b',
   },
 
   // Modal

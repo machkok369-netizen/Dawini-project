@@ -8,7 +8,7 @@ import {
   where, onSnapshot, orderBy, setDoc, increment
 } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from './firebaseConfig';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -100,6 +100,7 @@ export default function DoctorDashboardScreen({ navigation }) {
   const [currentPw, setCurrentPw]           = useState('');
   const [newPw, setNewPw]                   = useState('');
   const [confirmPw, setConfirmPw]           = useState('');
+  const [earnings, setEarnings]             = useState({ totalCompletedAppointments: 0 });
 
   const countdownRef = useRef(null);
 
@@ -151,6 +152,17 @@ export default function DoctorDashboardScreen({ navigation }) {
     };
     fetchSlots();
   }, [profile]);
+
+  useEffect(() => {
+    const earningsRef = doc(db, 'doctor_earnings', uid);
+    return onSnapshot(earningsRef, (snap) => {
+      if (snap.exists()) {
+        setEarnings(snap.data());
+      } else {
+        setEarnings({ totalCompletedAppointments: 0 });
+      }
+    });
+  }, [uid]);
 
   useEffect(() => {
     const q = query(collection(db, "reservations"), where("doctorId", "==", uid), orderBy("date", "asc"));
@@ -306,6 +318,12 @@ export default function DoctorDashboardScreen({ navigation }) {
             {subWarning > 0 && <Text style={styles.subBannerCountdown}>{countdown}</Text>}
           </View>
         )}
+
+        <View style={styles.earningsBanner}>
+          <Text style={styles.earningsTitle}>💳 Payment Tracking (El Dahabya Placeholder)</Text>
+          <Text style={styles.earningsValue}>Completed Appointments: {earnings.totalCompletedAppointments || 0}</Text>
+          <Text style={styles.earningsSub}>Transfers will appear in payment_transactions after bank integration.</Text>
+        </View>
 
         {/* Profile CV Card */}
         {!assistantActive && (
@@ -720,6 +738,10 @@ const styles = StyleSheet.create({
   subBannerRed: { backgroundColor: '#fee2e2', borderColor: '#fecaca' },
   subBannerLabel: { fontSize: 12, color: '#6b7280', textAlign: 'center', marginBottom: 4 },
   subBannerCountdown: { fontSize: 20, fontWeight: '800', color: '#16a34a', textAlign: 'center', letterSpacing: 0.5 },
+  earningsBanner: { marginHorizontal: 20, marginBottom: 12, backgroundColor: '#eff6ff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#bfdbfe' },
+  earningsTitle: { fontSize: 13, fontWeight: '700', color: '#1d4ed8', marginBottom: 4 },
+  earningsValue: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
+  earningsSub: { fontSize: 11, color: '#475569' },
   profileCard: { marginHorizontal: 20, marginBottom: 16, backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12 },
   coverContainer: { position: 'relative' },
   coverPhoto: { width: '100%', height: 140 },
