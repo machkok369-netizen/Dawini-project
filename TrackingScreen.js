@@ -14,15 +14,21 @@ export default function TrackingScreen() {
   useEffect(() => {
     // 2. This "Listens" to Firebase. Every time the doctor's GPS moves,
     // this function fires and updates the map automatically!
-    const unsub = onSnapshot(doc(db, "active_trips", "trip_001"), (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        setDoctorLocation({
-          latitude: data.lat,
-          longitude: data.lng,
-        });
+    const unsub = onSnapshot(
+      doc(db, "active_trips", "trip_001"),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setDoctorLocation({
+            latitude: data.lat,
+            longitude: data.lng,
+          });
+        }
+      },
+      (error) => {
+        console.log('Tracking error:', error);
       }
-    });
+    );
 
     return () => unsub();
   }, []);

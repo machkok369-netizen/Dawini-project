@@ -10,12 +10,14 @@ export default function AppointmentHistoryScreen({ navigation }) {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
   }, []);
 
   const fetchAppointments = async () => {
+    setFetchError(false);
     try {
       const userDoc = await auth.currentUser;
       if (!userDoc) return;
@@ -25,6 +27,8 @@ export default function AppointmentHistoryScreen({ navigation }) {
       setAppointments(appointments);
     } catch (e) {
       console.log("Fetch error:", e);
+      setFetchError(true);
+      Alert.alert('Connection Error', 'Could not load appointments. Check your internet connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -129,6 +133,18 @@ export default function AppointmentHistoryScreen({ navigation }) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#059669" />
+      </View>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyIcon}>⚠️</Text>
+        <Text style={styles.emptyText}>Could not load appointments</Text>
+        <TouchableOpacity style={styles.searchBtn} onPress={() => { setLoading(true); fetchAppointments(); }}>
+          <Text style={styles.searchBtnText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }

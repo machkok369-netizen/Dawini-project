@@ -16,6 +16,7 @@
     "expo-image-picker": "~17.0.10",
     "expo-localization": "~17.0.8",
     "expo-location": "~19.0.8",
+    "expo-notifications": "^0.29.14",
     "expo-print": "~15.0.8",
     "expo-sharing": "~14.0.8",
     "firebase": "^9.22.0",

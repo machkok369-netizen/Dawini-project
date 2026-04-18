@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  ScrollView, Modal, Image, Alert, ActivityIndicator, FlatList
+  ScrollView, Modal, Image, Alert, ActivityIndicator, FlatList, Linking
 } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import {
   collection, query, where, getDocs, addDoc,
-  serverTimestamp, doc, getDoc, updateDoc, increment
+  serverTimestamp, doc, getDoc, updateDoc, increment,
+  onSnapshot, orderBy, limit
 } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 
@@ -32,6 +33,13 @@ const normalizeText = (str = '') =>
 
 const dateKey = (d) => d.toISOString().split('T')[0];
 
+const REVIEW_CATEGORIES = [
+  { label: 'Overall',     field: 'overall' },
+  { label: 'Wait',        field: 'waitTime' },
+  { label: 'Attitude',    field: 'attitude' },
+  { label: 'Cleanliness', field: 'cleanliness' },
+];
+
 export default function PatientMapScreen({ navigation, route }) {
   const isDoctor = route?.params?.isDoctor || false;
   const userLocation = route?.params?.userLocation || null;
@@ -51,6 +59,13 @@ export default function PatientMapScreen({ navigation, route }) {
   const [bookingNote, setBookingNote]   = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
 
+  // Upcoming appointment banner (A)
+  const [upcomingAppointment, setUpcomingAppointment] = useState(null);
+
+  // Doctor ratings (C)
+  const [doctorRatings, setDoctorRatings] = useState([]);
+  const [ratingsLoading, setRatingsLoading] = useState(false);
+
   // Rating
   const [ratingVisible, setRatingVisible] = useState(false);
   const [ratingStars, setRatingStars]   = useState(0);
@@ -63,15 +78,31 @@ export default function PatientMapScreen({ navigation, route }) {
 
   // ── Get location & fetch doctors ─────────────────────────────────────────────
   useEffect(() => {
+    const requestLocationPermission = () =>
+      new Promise((resolve) => {
+        Alert.alert(
+          '📍 Location Access',
+          'Dawini uses your location to show nearby doctors on the map. Your location is only used while the app is open and is never stored on our servers.',
+          [
+            { text: 'Skip', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Continue', onPress: () => resolve(true) },
+          ],
+          { onDismiss: () => resolve(false) }
+        );
+      });
+
     const init = async () => {
       try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({});
-          setMyLocation({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-          });
+        const agreed = await requestLocationPermission();
+        if (agreed) {
+          let { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === 'granted') {
+            const loc = await Location.getCurrentPositionAsync({});
+            setMyLocation({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            });
+          }
         }
 
         // Fetch all doctors from users collection
@@ -80,11 +111,40 @@ export default function PatientMapScreen({ navigation, route }) {
         setDoctors(docs);
       } catch (e) {
         console.log('Map init error:', e);
+        Alert.alert('Connection Error', 'Could not load doctor data. Please check your internet connection and restart the app.');
       } finally {
         setLoading(false);
       }
     };
     init();
+  }, []);
+
+  // ── Real-time upcoming appointment banner (A) ─────────────────────────────────
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const q = query(
+      collection(db, 'reservations'),
+      where('patientId', '==', uid),
+      where('status', 'in', ['confirmed', 'pending'])
+    );
+    const unsub = onSnapshot(q, snap => {
+      const now = new Date();
+      const upcoming = snap.docs
+        .map(d => ({
+          id: d.id,
+          ...d.data(),
+          date: d.data().date?.toDate ? d.data().date.toDate() : new Date(d.data().date),
+        }))
+        .filter(a => a.date >= now)
+        .sort((a, b) => a.date - b.date);
+      setUpcomingAppointment(upcoming.length > 0 ? upcoming[0] : null);
+    }, (err) => {
+      console.log('Appointment banner error:', err);
+      setUpcomingAppointment(null);
+      Alert.alert('Connection Issue', 'Could not load your upcoming appointments. Pull to refresh when back online.');
+    });
+    return () => unsub();
   }, []);
 
   // ── Fetch today's slot for selected doctor ────────────────────────────────────
@@ -105,6 +165,34 @@ export default function PatientMapScreen({ navigation, route }) {
       }
     };
     fetchSlot();
+  }, [selectedDoctor]);
+
+  // ── Fetch doctor ratings when a doctor is selected (C) ───────────────────────
+  useEffect(() => {
+    if (!selectedDoctor) { setDoctorRatings([]); return; }
+    const fetchRatings = async () => {
+      setRatingsLoading(true);
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'ratings'),
+          where('doctorId', '==', selectedDoctor.id)
+        ));
+        const ratings = snap.docs
+          .map(d => ({
+            id: d.id,
+            ...d.data(),
+            createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(),
+          }))
+          .sort((a, b) => b.createdAt - a.createdAt);
+        setDoctorRatings(ratings);
+      } catch (e) {
+        console.log('Fetch ratings error:', e);
+        setDoctorRatings([]);
+      } finally {
+        setRatingsLoading(false);
+      }
+    };
+    fetchRatings();
   }, [selectedDoctor]);
 
   // ── Filtered doctors ──────────────────────────────────────────────────────────
@@ -150,6 +238,8 @@ export default function PatientMapScreen({ navigation, route }) {
       await addDoc(collection(db, 'reservations'), {
         doctorId: selectedDoctor.id,
         patientId: uid,
+        doctorName: selectedDoctor.fullName || selectedDoctor.name || 'Doctor',
+        doctorLocation: selectedDoctor.location || null,
         patientName: userData?.fullName || 'Patient', // ← Auto-filled
         patientPhone: userData?.phone || '', // ← Auto-filled
         patientAge: userData?.age || null, // ← New field
@@ -206,6 +296,39 @@ export default function PatientMapScreen({ navigation, route }) {
       setRatingCleanliness(0); setRatingComment('');
     } catch (e) {
       Alert.alert('Error', 'Could not submit rating.');
+    }
+  };
+
+  // ── Get directions via device maps app (B) ────────────────────────────────────
+  const handleGetDirections = (doctor) => {
+    if (!doctor?.location) { Alert.alert('Location unavailable', 'This doctor has no location set.'); return; }
+    const { latitude, longitude } = doctor.location;
+    const label = encodeURIComponent(`Dr. ${doctor.fullName}`);
+    const url = `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`;
+    Linking.openURL(url).catch(() => {
+      // Fallback to Google Maps web URL
+      Linking.openURL(`https://maps.google.com/?q=${latitude},${longitude}`);
+    });
+  };
+
+  // ── On My Way: open directions + notify doctor (E) ───────────────────────────
+  const handleOnMyWay = async (doctor) => {
+    handleGetDirections(doctor);
+    try {
+      const uid = auth.currentUser?.uid;
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      const patientName = userSnap.data()?.fullName || 'A patient';
+      await addDoc(collection(db, 'notifications'), {
+        userId: doctor.id,
+        type: 'patient_on_way',
+        title: '🚀 Patient On The Way',
+        message: `${patientName} is heading to your clinic`,
+        patientId: uid,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.log('On My Way notify error:', e);
     }
   };
 
@@ -307,10 +430,41 @@ export default function PatientMapScreen({ navigation, route }) {
         <Text style={styles.countText}>{filteredDoctors.length} clinics nearby</Text>
       </View>
 
+      {/* ── Upcoming appointment banner (A) ── */}
+      {upcomingAppointment && (
+        <View style={styles.apptBanner}>
+          <TouchableOpacity
+            style={styles.apptBannerMain}
+            onPress={() => navigation.navigate('AppointmentHistory')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.apptBannerIcon}>📅</Text>
+            <View style={styles.apptBannerInfo}>
+              <Text style={styles.apptBannerTitle} numberOfLines={1}>
+                Dr. {upcomingAppointment.doctorName || 'Doctor'}
+              </Text>
+              <Text style={styles.apptBannerDate}>
+                {upcomingAppointment.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                {upcomingAppointment.time ? ` · ${upcomingAppointment.time}` : ''}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          {upcomingAppointment.doctorLocation && (
+            <TouchableOpacity
+              style={styles.apptBannerNav}
+              onPress={() => handleGetDirections({ location: upcomingAppointment.doctorLocation, fullName: upcomingAppointment.doctorName })}
+            >
+              <Text style={styles.apptBannerNavText}>🗺️</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* ── Doctor card bottom sheet ── */}
       <Modal visible={cardVisible} transparent animationType="slide" onRequestClose={() => setCardVisible(false)}>
         <TouchableOpacity style={styles.cardOverlay} activeOpacity={1} onPress={() => setCardVisible(false)}>
           <View style={styles.cardSheet} onStartShouldSetResponder={() => true}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 28 }}>
 
             {/* Drag handle */}
             <View style={styles.dragHandle} />
@@ -331,6 +485,9 @@ export default function PatientMapScreen({ navigation, route }) {
                     {selectedDoctor.fullNameAr ? <Text style={styles.cardNameAr}>{selectedDoctor.fullNameAr}</Text> : null}
                     <Text style={styles.cardSpecialty}>{selectedDoctor.specialty}</Text>
                     <Text style={styles.cardCabinet}>{selectedDoctor.cabinetName}</Text>
+                    {selectedDoctor.experience ? (
+                      <Text style={styles.cardExperience}>🎓 {selectedDoctor.experience} yrs experience</Text>
+                    ) : null}
                     <View style={styles.cardStatusRow}>
                       <View style={[styles.cardStatusDot, { backgroundColor: STATUS_COLORS[selectedDoctor.status] || '#9ca3af' }]} />
                       <Text style={[styles.cardStatusText, { color: STATUS_COLORS[selectedDoctor.status] || '#9ca3af' }]}>
@@ -338,7 +495,7 @@ export default function PatientMapScreen({ navigation, route }) {
                           : selectedDoctor.status === 'brb' ? 'Be Right Back'
                           : selectedDoctor.status === 'away' ? 'Away'
                           : selectedDoctor.status === 'vacation' ? 'On Vacation'
-                          : 'Unknown'}
+                          : 'Offline'}
                       </Text>
                     </View>
                   </View>
@@ -347,7 +504,7 @@ export default function PatientMapScreen({ navigation, route }) {
                 {/* Stats row */}
                 <View style={styles.cardStats}>
                   <View style={styles.cardStat}>
-                    <Text style={styles.cardStatValue}>{selectedDoctor.visitCost} DA</Text>
+                    <Text style={styles.cardStatValue}>{selectedDoctor.visitCost ? `${selectedDoctor.visitCost} DA` : '—'}</Text>
                     <Text style={styles.cardStatLabel}>Visit Cost</Text>
                   </View>
                   <View style={styles.cardStatDivider} />
@@ -359,14 +516,36 @@ export default function PatientMapScreen({ navigation, route }) {
                   </View>
                   <View style={styles.cardStatDivider} />
                   <View style={styles.cardStat}>
-                    <Text style={styles.cardStatValue}>{selectedDoctor.phone}</Text>
+                    <Text style={styles.cardStatValue}>
+                      {selectedDoctor.averageRating ? `${selectedDoctor.averageRating}★` : '—'}
+                    </Text>
+                    <Text style={styles.cardStatLabel}>Rating</Text>
+                  </View>
+                  <View style={styles.cardStatDivider} />
+                  <View style={styles.cardStat}>
+                    <Text style={styles.cardStatValue} numberOfLines={1}>{selectedDoctor.phone || '—'}</Text>
                     <Text style={styles.cardStatLabel}>Phone</Text>
                   </View>
                 </View>
 
+                {/* Additional details */}
+                {(selectedDoctor.city || selectedDoctor.address || selectedDoctor.workingHours) ? (
+                  <View style={styles.cardDetailsBox}>
+                    {selectedDoctor.city ? (
+                      <Text style={styles.cardDetailItem}>📍 {selectedDoctor.address ? `${selectedDoctor.address}, ` : ''}{selectedDoctor.city}</Text>
+                    ) : null}
+                    {selectedDoctor.workingHours ? (
+                      <Text style={styles.cardDetailItem}>🕐 {selectedDoctor.workingHours}</Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
                 {/* Equipment */}
                 {selectedDoctor.equipment ? (
-                  <Text style={styles.cardEquipment}>{selectedDoctor.equipment}</Text>
+                  <View style={styles.cardEquipmentBox}>
+                    <Text style={styles.cardEquipmentLabel}>🩺 Equipment & Services</Text>
+                    <Text style={styles.cardEquipment}>{selectedDoctor.equipment}</Text>
+                  </View>
                 ) : null}
 
                 {/* Entrance / Street photos */}
@@ -381,39 +560,90 @@ export default function PatientMapScreen({ navigation, route }) {
                     {selectedDoctor.photoStreet && (
                       <View style={styles.cardPhotoThumbWrap}>
                         <Image source={{ uri: selectedDoctor.photoStreet }} style={styles.cardPhotoThumb} />
-                        <Text style={styles.cardPhotoThumbLabel}>Street</Text>
+                        <Text style={styles.cardPhotoThumbLabel}>Street View</Text>
                       </View>
                     )}
                   </ScrollView>
                 )}
 
-                {/* Action buttons */}
+                {/* Reviews section (C) */}
+                {doctorRatings.length > 0 && (() => {
+                  const avg = (field) => (doctorRatings.reduce((s, r) => s + (r[field] || 0), 0) / doctorRatings.length).toFixed(1);
+                  const comments = doctorRatings.filter(r => r.comment);
+                  return (
+                    <View style={styles.reviewsSection}>
+                      <View style={styles.reviewsHeader}>
+                        <Text style={styles.reviewsTitle}>Patient Reviews</Text>
+                        <Text style={styles.reviewsCount}>⭐ {avg('overall')} · {doctorRatings.length} reviews</Text>
+                      </View>
+                      <View style={styles.reviewsBars}>
+                        {REVIEW_CATEGORIES.map(({ label, field }) => (
+                          <View key={field} style={styles.reviewBarItem}>
+                            <Text style={styles.reviewBarLabel}>{label}</Text>
+                            <Text style={styles.reviewBarVal}>{avg(field)}★</Text>
+                          </View>
+                        ))}
+                      </View>
+                      {comments.slice(0, 3).map(r => (
+                        <View key={r.id} style={styles.commentCard}>
+                          <Text style={styles.commentText}>"{r.comment}"</Text>
+                          <Text style={styles.commentDate}>{r.createdAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                        </View>
+                      ))}
+                      {comments.length > 3 && (
+                        <Text style={styles.seeAllReviews}>+ {comments.length - 3} more reviews</Text>
+                      )}
+                    </View>
+                  );
+                })()}
+
+                {/* Action sheet (B + E) */}
                 {!isDoctor && (
                   <View style={styles.cardActions}>
+                    {/* Get Directions button (B) */}
+                    <TouchableOpacity
+                      style={styles.directionsBtn}
+                      onPress={() => handleGetDirections(selectedDoctor)}
+                    >
+                      <Text style={styles.directionsBtnText}>🗺️ Get Directions</Text>
+                    </TouchableOpacity>
+
+                    {/* Book appointment button */}
                     {selectedDoctor.status === 'in_office' && todaySlot?.available > 0 ? (
                       <TouchableOpacity
                         style={styles.bookBtn}
                         onPress={() => { setCardVisible(false); setBookingVisible(true); }}
                       >
-                        <Text style={styles.bookBtnText}>Book Now</Text>
+                        <Text style={styles.bookBtnText}>📅 Book an Appointment</Text>
                       </TouchableOpacity>
                     ) : (
                       <View style={styles.bookBtnDisabled}>
                         <Text style={styles.bookBtnDisabledText}>
-                          {selectedDoctor.status !== 'in_office' ? 'Doctor not available' : 'No slots today'}
+                          {selectedDoctor.status !== 'in_office' ? '⚠️ Doctor not available right now' : '⚠️ No slots available today'}
                         </Text>
                       </View>
                     )}
+
+                    {/* On My Way — notify doctor (E) */}
+                    <TouchableOpacity
+                      style={styles.onMyWayBtn}
+                      onPress={() => { setCardVisible(false); handleOnMyWay(selectedDoctor); }}
+                    >
+                      <Text style={styles.onMyWayBtnText}>🚀 On My Way — Notify Doctor</Text>
+                    </TouchableOpacity>
+
+                    {/* Rate & Review */}
                     <TouchableOpacity
                       style={styles.rateBtn}
                       onPress={() => { setCardVisible(false); setRatingVisible(true); }}
                     >
-                      <Text style={styles.rateBtnText}>Rate & Review</Text>
+                      <Text style={styles.rateBtnText}>⭐ Rate & Review</Text>
                     </TouchableOpacity>
                   </View>
                 )}
               </>
             )}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -606,4 +836,41 @@ const styles = StyleSheet.create({
   stars: { flexDirection: 'row', gap: 4 },
   star: { fontSize: 28, color: '#e5e7eb' },
   starFilled: { color: '#f59e0b' },
+
+  // Appointment banner (A)
+  apptBanner: { position: 'absolute', bottom: 90, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a', borderRadius: 16, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10, overflow: 'hidden' },
+  apptBannerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
+  apptBannerIcon: { fontSize: 22, marginRight: 10 },
+  apptBannerInfo: { flex: 1 },
+  apptBannerTitle: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  apptBannerDate: { fontSize: 12, color: '#bbf7d0', marginTop: 2 },
+  apptBannerNav: { paddingVertical: 12, paddingHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.15)' },
+  apptBannerNavText: { fontSize: 22 },
+
+  // Card experience & details (C)
+  cardExperience: { fontSize: 12, color: '#6b7280', marginTop: 3 },
+  cardDetailsBox: { backgroundColor: '#f9fafb', borderRadius: 12, padding: 12, marginBottom: 12, gap: 4 },
+  cardDetailItem: { fontSize: 13, color: '#374151' },
+  cardEquipmentBox: { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 12, marginBottom: 12 },
+  cardEquipmentLabel: { fontSize: 11, fontWeight: '700', color: '#16a34a', marginBottom: 4, letterSpacing: 0.5 },
+
+  // Reviews section (C)
+  reviewsSection: { borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 16, marginTop: 4, marginBottom: 8 },
+  reviewsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  reviewsTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  reviewsCount: { fontSize: 13, color: '#f59e0b', fontWeight: '600' },
+  reviewsBars: { flexDirection: 'row', gap: 6, marginBottom: 12 },
+  reviewBarItem: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 8, padding: 8, alignItems: 'center' },
+  reviewBarLabel: { fontSize: 10, color: '#9ca3af', fontWeight: '600', marginBottom: 3 },
+  reviewBarVal: { fontSize: 13, fontWeight: '700', color: '#f59e0b' },
+  commentCard: { backgroundColor: '#fefce8', borderRadius: 10, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: '#f59e0b' },
+  commentText: { fontSize: 13, color: '#374151', fontStyle: 'italic', lineHeight: 18 },
+  commentDate: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
+  seeAllReviews: { fontSize: 13, color: '#6b7280', textAlign: 'center', paddingVertical: 6 },
+
+  // Action sheet buttons (B + E)
+  directionsBtn: { backgroundColor: '#eff6ff', borderWidth: 1.5, borderColor: '#3b82f6', padding: 14, borderRadius: 14, alignItems: 'center', marginBottom: 2 },
+  directionsBtnText: { color: '#1d4ed8', fontWeight: '700', fontSize: 15 },
+  onMyWayBtn: { backgroundColor: '#fff7ed', borderWidth: 1.5, borderColor: '#f97316', padding: 14, borderRadius: 14, alignItems: 'center' },
+  onMyWayBtnText: { color: '#c2410c', fontWeight: '700', fontSize: 15 },
 });

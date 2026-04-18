@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import NotificationService from './NotificationService';
 
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
@@ -16,6 +17,11 @@ import AdminScreen from './screens/AdminScreen';
 const Stack = createStackNavigator();
 
 export default function App() {
+  useEffect(() => {
+    // Register for push notifications on app start so tokens are always fresh
+    NotificationService.registerForPushNotifications();
+  }, []);
+
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Login">

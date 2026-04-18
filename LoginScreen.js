@@ -14,8 +14,17 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   const handleEmailLogin = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !password) {
       Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert('Weak Password', 'Password must be at least 6 characters');
       return;
     }
     setLoading(true);
