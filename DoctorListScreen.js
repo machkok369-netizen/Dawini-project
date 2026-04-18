@@ -5,7 +5,7 @@ import {
   TextInput, ActivityIndicator, Image, Alert 
 } from 'react-native';
 
-import { collection, query, onSnapshot, doc, updateDoc, serverTimestamp, getDoc, where } from 'firebase/firestore'; 
+import { collection, query, getDocs, doc, updateDoc, serverTimestamp, getDoc, where } from 'firebase/firestore'; 
 import { db, auth } from './firebaseConfig';
 import * as Location from 'expo-location';
 
@@ -70,38 +70,51 @@ export default function DoctorListScreen({ navigation }) {
     await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.High, distanceInterval: 5 }, 
       (location) => {
-        updateDoc(doc(db, "active_trips", "trip_001"), {
+        updateDoc(doc(db, "active_trips", auth.currentUser.uid), {
           lat: location.coords.latitude,
           lng: location.coords.longitude,
           lastUpdated: serverTimestamp()
         });
       }
     );
-    navigation.navigate('Tracking', { doctor });
+    navigation.navigate('Tracking', { doctor, tripUserId: auth.currentUser.uid });
   };
 
   useEffect(() => {
-    const unsubDocs = onSnapshot(
-      query(
-        collection(db, 'users'),
-        where('role', '==', 'doctor'),
-        where('profileCompleted', '==', true),
-        where('isVerified', '==', true)
-      ),
-      (snapshot) => {
+    let isMounted = true;
+
+    const fetchDoctors = async () => {
+      try {
+        const snapshot = await getDocs(
+          query(
+            collection(db, 'users'),
+            where('role', '==', 'doctor'),
+            where('profileCompleted', '==', true),
+            where('isVerified', '==', true)
+          )
+        );
+        if (!isMounted) return;
         const doctorsList = snapshot.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(d => d.location && d.fullName); // ✅ Filter valid doctors
+          .filter(d => d.location && d.fullName);
         setDoctors(doctorsList);
         setLoading(false);
-      },
-      (error) => {
+      } catch (error) {
         console.log('Doctors fetch error:', error);
-        Alert.alert('Error', 'Failed to load doctors');
-        setLoading(false);
+        if (isMounted) {
+          Alert.alert('Error', 'Failed to load doctors');
+          setLoading(false);
+        }
       }
-    );
-    return () => unsubDocs();
+    };
+
+    fetchDoctors();
+    const interval = setInterval(fetchDoctors, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const filteredDoctors = useMemo(() => {

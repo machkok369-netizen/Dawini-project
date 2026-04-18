@@ -7,6 +7,7 @@ import { db } from './firebaseConfig';
 
 export default function TrackingScreen({ route }) {
   const targetDoctor = route?.params?.doctor || null;
+  const tripUserId = route?.params?.tripUserId || null;
   const [patientLocation, setPatientLocation] = useState(null);
 
   const [doctorLocation, setDoctorLocation] = useState({
@@ -16,9 +17,10 @@ export default function TrackingScreen({ route }) {
 
   useEffect(() => {
     if (targetDoctor?.location) return () => {};
+    if (!tripUserId) return () => {};
 
     const unsubListener = onSnapshot(
-      doc(db, "active_trips", "trip_001"),
+      doc(db, "active_trips", tripUserId),
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
