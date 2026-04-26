@@ -15,6 +15,7 @@ import AppointmentHistoryScreen from './AppointmentHistoryScreen';
 import NotificationsScreen from './NotificationsScreen';
 import AdminScreen from './AdminScreen';
 import PatientProfileScreen from './PatientProfileScreen';
+import SubscriptionPaymentScreen from './SubscriptionPaymentScreen';
 const Stack = createStackNavigator();
 
 export default function App() {
@@ -99,6 +100,12 @@ export default function App() {
           name="Notifications"
           component={NotificationsScreen}
           options={{ title: 'Notifications' }}
+        />
+
+        <Stack.Screen
+          name="SubscriptionPayment"
+          component={SubscriptionPaymentScreen}
+          options={{ title: 'Renew Subscription' }}
         />
 
       </Stack.Navigator>

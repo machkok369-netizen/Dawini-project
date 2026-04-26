@@ -70,7 +70,7 @@ export class AppointmentService {
   }
 
   // ✅ CANCEL APPOINTMENT
-  static async cancelAppointment(appointmentId, cancelledBy = 'patient') {
+  static async cancelAppointment(appointmentId, cancelledBy = 'patient', reason = '') {
     try {
       const appointmentRef = doc(db, 'reservations', appointmentId);
       const appointmentDoc = await getDoc(appointmentRef);
@@ -84,6 +84,7 @@ export class AppointmentService {
         status: 'cancelled',
         cancelledBy,
         cancelledAt: serverTimestamp(),
+        ...(reason ? { cancellationReason: reason } : {}),
       });
 
       const dateKey = appointmentData.date.toDate

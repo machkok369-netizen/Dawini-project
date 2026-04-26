@@ -24,6 +24,17 @@ export class RatingService {
         return { success: false, error: 'You must have an appointment with this doctor to rate' };
       }
 
+      // Prevent duplicate ratings — one rating per patient per doctor
+      const dupQ = query(
+        collection(db, 'ratings'),
+        where('doctorId', '==', doctorId),
+        where('patientId', '==', uid)
+      );
+      const dupSnap = await getDocs(dupQ);
+      if (!dupSnap.empty) {
+        return { success: false, error: 'You have already rated this doctor' };
+      }
+
       await addDoc(collection(db, 'ratings'), {
         doctorId,
         patientId: uid,
@@ -32,6 +43,7 @@ export class RatingService {
         attitude: rating.attitude || 0,
         cleanliness: rating.cleanliness || 0,
         comment: rating.comment || '',
+        hidden: false,
         createdAt: serverTimestamp(),
       });
 
@@ -72,8 +84,8 @@ export class RatingService {
     }
   }
 
-  // ✅ GET DOCTOR RATINGS
-  static async getDoctorRatings(doctorId) {
+  // ✅ GET DOCTOR RATINGS (excludes hidden reviews by default)
+  static async getDoctorRatings(doctorId, includeHidden = false) {
     try {
       const q = query(
         collection(db, 'ratings'),
@@ -81,14 +93,41 @@ export class RatingService {
       );
 
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(),
-      }));
+      return snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(),
+        }))
+        .filter(r => includeHidden || !r.hidden);
     } catch (e) {
       console.log("Get ratings error:", e);
       return [];
+    }
+  }
+
+  // ✅ DOCTOR REPLY TO RATING
+  static async replyToRating(ratingId, reply) {
+    try {
+      await updateDoc(doc(db, 'ratings', ratingId), {
+        doctorReply: reply.trim(),
+        repliedAt: serverTimestamp(),
+      });
+      return { success: true };
+    } catch (e) {
+      console.log("Reply to rating error:", e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  // ✅ ADMIN MODERATION — hide or unhide a review
+  static async moderateRating(ratingId, hidden) {
+    try {
+      await updateDoc(doc(db, 'ratings', ratingId), { hidden });
+      return { success: true };
+    } catch (e) {
+      console.log("Moderate rating error:", e);
+      return { success: false, error: e.message };
     }
   }
 

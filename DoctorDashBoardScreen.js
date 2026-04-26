@@ -622,6 +622,10 @@ export default function DoctorDashboardScreen({ navigation }) {
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
           <View style={styles.menuSheet}>
             <Text style={styles.menuTitle}>Settings</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('SubscriptionPayment'); }}>
+              <Text style={styles.menuItemText}>💳 Renew Subscription</Text>
+              <Text style={styles.menuItemSub}>Pay via El Dahabya to extend your plan</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('EditProfile', { isNewDoctor: false }); }}>
               <Text style={styles.menuItemText}>Edit Profile</Text>
               <Text style={styles.menuItemSub}>Update clinic info, photos, specialty</Text>

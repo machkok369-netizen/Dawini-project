@@ -45,6 +45,7 @@ export default function AdminScreen({ navigation }) {
   const [reportData, setReportData] = useState(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [disputes, setDisputes] = useState([]);
 
   // Check if user is admin
   useEffect(() => {
@@ -143,6 +144,10 @@ export default function AdminScreen({ navigation }) {
       setPendingDoctors(pendingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setPatients(patientsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setSuggestions(suggestionSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      // Load disputes
+      const disputeSnap = await getDocs(collection(db, 'reports'));
+      setDisputes(disputeSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
     } catch (e) {
       console.log('Load dashboard error:', e);
@@ -601,6 +606,68 @@ export default function AdminScreen({ navigation }) {
     }
   };
 
+  const renderDisputes = () => (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>⚠️ Disputes & Reports ({disputes.filter(d => d.status !== 'resolved').length} open)</Text>
+        {disputes.length === 0 ? (
+          <Text style={styles.emptyText}>No disputes reported</Text>
+        ) : disputes.map((item) => {
+          const isResolved = item.status === 'resolved';
+          return (
+            <View key={item.id} style={[styles.doctorCard, isResolved && { opacity: 0.5 }]}>
+              <View style={styles.doctorInfo}>
+                <Text style={styles.doctorName}>{item.subject || 'No subject'}</Text>
+                <Text style={styles.doctorSpecialty}>
+                  Type: {item.type || 'complaint'} · Against: {item.targetType || 'unknown'}
+                </Text>
+                {item.targetName && <Text style={styles.doctorPhone}>Against: {item.targetName}</Text>}
+                {item.reportedBy && <Text style={styles.doctorPhone}>Reported by: {item.reportedBy}</Text>}
+                <Text style={styles.doctorPhone}>{item.description || '—'}</Text>
+                <Text style={[styles.doctorPhone, { color: isResolved ? '#059669' : '#f59e0b', fontWeight: '700' }]}>
+                  {isResolved ? '✅ Resolved' : '⏳ Open'}
+                </Text>
+              </View>
+              {!isResolved && (
+                <TouchableOpacity
+                  style={styles.verifyBtn}
+                  onPress={() => {
+                    Alert.alert(
+                      'Resolve Dispute',
+                      'Mark this report as resolved?',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Resolve',
+                          onPress: async () => {
+                            try {
+                              await updateDoc(doc(db, 'reports', item.id), {
+                                status: 'resolved',
+                                resolvedAt: serverTimestamp(),
+                                resolvedBy: auth.currentUser?.uid,
+                              });
+                              setDisputes(prev => prev.map(d =>
+                                d.id === item.id ? { ...d, status: 'resolved' } : d
+                              ));
+                            } catch (e) {
+                              Alert.alert('Error', e.message);
+                            }
+                          }
+                        }
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={styles.verifyBtnText}>✅ Resolve</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+
   const renderSuggestions = () => (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <View style={styles.section}>
@@ -716,6 +783,18 @@ export default function AdminScreen({ navigation }) {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={[styles.tab, currentTab === 'disputes' && styles.tabActive]}
+          onPress={() => setCurrentTab('disputes')}
+        >
+          <Text style={[styles.tabText, currentTab === 'disputes' && styles.tabTextActive]}>Disputes</Text>
+          {disputes.filter(d => d.status !== 'resolved').length > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{disputes.filter(d => d.status !== 'resolved').length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.tab, currentTab === 'suggestions' && styles.tabActive]}
           onPress={() => setCurrentTab('suggestions')}
         >
@@ -736,6 +815,7 @@ export default function AdminScreen({ navigation }) {
         {currentTab === 'doctors' && renderDoctors()}
         {currentTab === 'patients' && renderPatients()}
         {currentTab === 'reports' && renderReports()}
+        {currentTab === 'disputes' && renderDisputes()}
         {currentTab === 'suggestions' && renderSuggestions()}
         {currentTab === 'settings' && renderSettings()}
       </View>
