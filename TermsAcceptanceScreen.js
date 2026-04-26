@@ -5,10 +5,15 @@ import {
 } from 'react-native';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+import i18n from './i18n';
 
 const TERMS_VERSION = '1.0';
 
 export default function TermsAcceptanceScreen({ navigation, route }) {
+  const { t } = useTranslation('screens');
+  const { isRTL } = useLanguage();
   const { uid, nextScreen, nextScreenParams } = route.params;
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [agreedToMedical, setAgreedToMedical] = useState(false);
@@ -47,9 +52,9 @@ export default function TermsAcceptanceScreen({ navigation, route }) {
   const canAccept = agreedToTerms && agreedToMedical;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Terms &amp; Conditions</Text>
-      <Text style={styles.subheader}>Please read carefully before using Dawini</Text>
+    <View style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}>
+      <Text style={styles.header}>{t('terms.title')}</Text>
+      <Text style={styles.subheader}>{t('terms.subtitle')}</Text>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
@@ -168,7 +173,7 @@ export default function TermsAcceptanceScreen({ navigation, route }) {
           disabled={loading}
           activeOpacity={0.7}
         >
-          <Text style={styles.declineText}>Decline</Text>
+          <Text style={styles.declineText}>{t('terms.declineBtn')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -180,7 +185,7 @@ export default function TermsAcceptanceScreen({ navigation, route }) {
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.acceptText}>Accept &amp; Continue</Text>
+            <Text style={styles.acceptText}>{t('terms.acceptBtn')}</Text>
           )}
         </TouchableOpacity>
       </View>

@@ -2,6 +2,9 @@ import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import NotificationService from './NotificationService';
+import { LanguageProvider } from './LanguageContext';
+import { I18nextProvider } from 'react-i18next';
+import i18n from './i18n';
 
 import LoginScreen from './LoginScreen';
 import RegisterScreen from './RegisterScreen';
@@ -26,6 +29,8 @@ export default function App() {
   }, []);
 
   return (
+    <LanguageProvider>
+      <I18nextProvider i18n={i18n}>
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Login">
 
@@ -117,5 +122,7 @@ export default function App() {
 
       </Stack.Navigator>
     </NavigationContainer>
+      </I18nextProvider>
+    </LanguageProvider>
   );
 }
