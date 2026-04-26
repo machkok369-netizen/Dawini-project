@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  ScrollView, Modal, Image, Alert, ActivityIndicator
+  ScrollView, Modal, Image, Alert, ActivityIndicator, FlatList
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import {
   collection, query, where, getDocs, addDoc,
@@ -95,8 +94,6 @@ export default function PatientMapScreen({ navigation, route }) {
   const [suggestionVisible, setSuggestionVisible] = useState(false);
   const [suggestionText, setSuggestionText] = useState('');
   const [suggestionLoading, setSuggestionLoading] = useState(false);
-
-  const mapRef = useRef(null);
 
   // ── Get location & fetch doctors ─────────────────────────────────────────────
   useEffect(() => {
@@ -246,12 +243,13 @@ export default function PatientMapScreen({ navigation, route }) {
       .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
   }, [doctors, searchQuery, selectedFilter, myLocation]);
 
-  const getRatingEligibility = async () => {
-    if (!selectedDoctor) return { allowed: false, reason: 'Choose a doctor first.' };
+  const getRatingEligibility = async (doctorOverride = null) => {
+    const targetDoctor = doctorOverride || selectedDoctor;
+    if (!targetDoctor) return { allowed: false, reason: 'Choose a doctor first.' };
     const uid = auth.currentUser.uid;
     const reservationsSnap = await getDocs(query(
       collection(db, 'reservations'),
-      where('doctorId', '==', selectedDoctor.id),
+      where('doctorId', '==', targetDoctor.id),
       where('patientId', '==', uid),
       where('status', '==', 'completed')
     ));
@@ -260,7 +258,7 @@ export default function PatientMapScreen({ navigation, route }) {
     }
     const ratingsSnap = await getDocs(query(
       collection(db, 'ratings'),
-      where('doctorId', '==', selectedDoctor.id),
+      where('doctorId', '==', targetDoctor.id),
       where('patientId', '==', uid)
     ));
     const ratedAppointmentIds = new Set(
@@ -283,16 +281,10 @@ export default function PatientMapScreen({ navigation, route }) {
     return { allowed: true, appointmentId: eligible.id };
   };
 
-  // ── Handle pin tap ────────────────────────────────────────────────────────────
-  const handlePinTap = (doctor) => {
+  // ── Handle doctor select (open card sheet) ───────────────────────────────────
+  const handleDoctorSelect = (doctor) => {
     setSelectedDoctor(doctor);
     setCardVisible(true);
-    mapRef.current?.animateToRegion({
-      latitude: doctor.location.latitude - 0.008,
-      longitude: doctor.location.longitude,
-      latitudeDelta: 0.04,
-      longitudeDelta: 0.04,
-    }, 400);
   };
 
   // ── Book reservation ──────────────────────────────────────────────────────────
@@ -427,8 +419,9 @@ export default function PatientMapScreen({ navigation, route }) {
     navigation.navigate('Tracking', { doctor });
   };
 
-  const openRatingModal = async () => {
-    const eligibility = await getRatingEligibility();
+  const openRatingModal = async (doctorOverride = null) => {
+    if (doctorOverride) setSelectedDoctor(doctorOverride);
+    const eligibility = await getRatingEligibility(doctorOverride);
     if (!eligibility.allowed) {
       Alert.alert('Not Allowed Yet', eligibility.reason);
       return;
@@ -475,117 +468,101 @@ export default function PatientMapScreen({ navigation, route }) {
     </View>
   );
 
-  const initialRegion = myLocation
-    ? { ...myLocation, latitudeDelta: 0.08, longitudeDelta: 0.08 }
-    : { latitude: 36.365, longitude: 6.61, latitudeDelta: 0.15, longitudeDelta: 0.15 };
+  const renderDoctorCard = ({ item: doctor }) => {
+    const statusLabel = doctor.status === 'in_office' ? 'In Office'
+      : doctor.status === 'brb' ? 'Be Right Back'
+      : doctor.status === 'away' ? 'Away'
+      : doctor.status === 'vacation' ? 'On Vacation'
+      : 'Offline';
+
+    return (
+      <TouchableOpacity style={styles.listCard} onPress={() => handleDoctorSelect(doctor)} activeOpacity={0.85}>
+        <View style={styles.listCardHeader}>
+          {doctor.photoMain ? (
+            <Image source={{ uri: doctor.photoMain }} style={styles.listCardPhoto} />
+          ) : (
+            <View style={[styles.listCardPhoto, styles.listCardPhotoPlaceholder]}>
+              <Text style={styles.listCardPhotoIcon}>🏥</Text>
+            </View>
+          )}
+          <View style={styles.listCardInfo}>
+            <View style={styles.listCardTopRow}>
+              <Text style={styles.listCardName} numberOfLines={1}>Dr. {doctor.fullName}</Text>
+              <View style={styles.listCardRatingBadge}>
+                <Text style={styles.listCardRatingText}>⭐ {doctor.averageRating || '0.0'}</Text>
+              </View>
+            </View>
+            <Text style={styles.listCardSpecialty}>{doctor.specialty}</Text>
+            <View style={styles.listCardMeta}>
+              <View style={[styles.listCardStatusDot, { backgroundColor: STATUS_COLORS[doctor.status] || '#9ca3af' }]} />
+              <Text style={[styles.listCardStatusText, { color: STATUS_COLORS[doctor.status] || '#9ca3af' }]}>{statusLabel}</Text>
+              {doctor.distanceKm != null && (
+                <Text style={styles.listCardDistance}> · 📍 {doctor.distanceKm.toFixed(2)} km</Text>
+              )}
+            </View>
+            {doctor.visitCost ? (
+              <Text style={styles.listCardCost}>💵 {doctor.visitCost} DA per visit</Text>
+            ) : null}
+          </View>
+        </View>
+        {!isDoctor && (
+          <View style={styles.listCardActions}>
+            <TouchableOpacity
+              style={styles.listGoBtn}
+              onPress={() => handleGoNow(doctor)}
+            >
+              <Text style={styles.listGoBtnText}>🗺️ Go Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.listBookBtn, doctor.status !== 'in_office' && styles.listBookBtnDisabled]}
+              onPress={() => { setSelectedDoctor(doctor); setBookingVisible(true); }}
+              disabled={doctor.status !== 'in_office'}
+            >
+              <Text style={[styles.listBookBtnText, doctor.status !== 'in_office' && styles.listBookBtnTextDisabled]}>📅 Book</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.listRateBtn}
+              onPress={() => openRatingModal(doctor)}
+            >
+              <Text style={styles.listRateBtnText}>⭐ Rate</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color="#16a34a" />
-      <Text style={styles.loadingText}>Loading map...</Text>
+      <Text style={styles.loadingText}>Finding nearby doctors...</Text>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      {/* ── Full screen map ── */}
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={initialRegion}
-        showsUserLocation
-        showsMyLocationButton={false}
-      >
-        {filteredDoctors.map(doctor => (
-          doctor.location ? (
-            <Marker
-              key={doctor.id}
-              coordinate={doctor.location}
-              onPress={() => handlePinTap(doctor)}
-            >
-              <View style={[styles.pin, { backgroundColor: STATUS_COLORS[doctor.status] || '#9ca3af' }]}>
-                <Text style={styles.pinText}>{doctor.specialty?.charAt(0) || 'D'}</Text>
-              </View>
-            </Marker>
-          ) : null
-        ))}
-      </MapView>
 
-      {/* ── Search bar ── */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search doctor, specialty, clinic..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#9ca3af"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text style={styles.searchClear}>✕</Text>
+      {/* ── Header ── */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Dawini 🏥</Text>
+        <View style={styles.headerRight}>
+          {!isDoctor && (
+            <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('PatientProfile')}>
+              <Text style={styles.headerIconBtnText}>👤</Text>
+            </TouchableOpacity>
+          )}
+          {!isDoctor && (
+            <TouchableOpacity style={styles.headerIconBtn} onPress={() => setSuggestionVisible(true)}>
+              <Text style={styles.headerIconBtnText}>💡</Text>
+            </TouchableOpacity>
+          )}
+          {isDoctor && (
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+              <Text style={styles.backBtnText}>← Back</Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
-
-      {/* ── Specialty filter bar ── */}
-      <View style={styles.filterWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBar}>
-          {SPECIALTIES.map(spec => (
-            <TouchableOpacity
-              key={spec}
-              style={[styles.filterChip, selectedFilter === spec && styles.filterChipActive]}
-              onPress={() => setSelectedFilter(spec)}
-            >
-              <Text style={[styles.filterChipText, selectedFilter === spec && styles.filterChipTextActive]}>
-                {spec}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* ── Back button for doctor mode ── */}
-      {isDoctor && (
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtnText}>← Back</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* ── Results count ── */}
-      <View style={styles.countBadge}>
-        <Text style={styles.countText}>
-          {filteredDoctors.length} doctors within {DISCOVERY_RADIUS_KM}km
-        </Text>
-      </View>
-
-      {/* ── Nearby doctors list (closest → farthest) ── */}
-      <View style={styles.nearbyListWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.nearbyListContent}>
-          {filteredDoctors.map((doctor) => (
-            <TouchableOpacity key={doctor.id} style={styles.nearbyChip} onPress={() => handlePinTap(doctor)}>
-              <Text style={styles.nearbyChipTitle} numberOfLines={1}>Dr. {doctor.fullName}</Text>
-              <Text style={styles.nearbyChipSub} numberOfLines={1}>
-                {doctor.specialty} {doctor.distanceKm != null ? `· ${doctor.distanceKm.toFixed(2)}km` : ''}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {!isDoctor && (
-        <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('PatientProfile')}>
-          <Text style={styles.profileBtnText}>👤</Text>
-        </TouchableOpacity>
-      )}
-
-      {!isDoctor && (
-        <TouchableOpacity style={styles.suggestionBtn} onPress={() => setSuggestionVisible(true)}>
-          <Text style={styles.suggestionBtnText}>💡</Text>
-        </TouchableOpacity>
-      )}
 
       {/* ── Upcoming appointment banner (A) ── */}
       {upcomingAppointment && (
@@ -616,6 +593,64 @@ export default function PatientMapScreen({ navigation, route }) {
           )}
         </View>
       )}
+
+      {/* ── Search bar ── */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search doctor, specialty, clinic..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#9ca3af"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* ── Specialty filter bar ── */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBar} style={styles.filterWrapper}>
+        {SPECIALTIES.map(spec => (
+          <TouchableOpacity
+            key={spec}
+            style={[styles.filterChip, selectedFilter === spec && styles.filterChipActive]}
+            onPress={() => setSelectedFilter(spec)}
+          >
+            <Text style={[styles.filterChipText, selectedFilter === spec && styles.filterChipTextActive]}>
+              {spec}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* ── Results count ── */}
+      <View style={styles.countRow}>
+        <Text style={styles.countText}>
+          {filteredDoctors.length} doctor{filteredDoctors.length !== 1 ? 's' : ''} within {DISCOVERY_RADIUS_KM} km
+          {!myLocation ? ' (enable GPS for distance)' : ''}
+        </Text>
+      </View>
+
+      {/* ── Doctor list (closest → farthest) ── */}
+      <FlatList
+        data={filteredDoctors}
+        renderItem={renderDoctorCard}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyIcon}>🏥</Text>
+            <Text style={styles.emptyText}>No doctors found nearby</Text>
+            <Text style={styles.emptySubText}>Try adjusting your search or specialty filter</Text>
+          </View>
+        }
+      />
 
       {/* ── Doctor card bottom sheet ── */}
       <Modal visible={cardVisible} transparent animationType="slide" onRequestClose={() => setCardVisible(false)}>
@@ -950,84 +985,77 @@ export default function PatientMapScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  map: { ...StyleSheet.absoluteFillObject },
+  container: { flex: 1, backgroundColor: '#f0f4f8' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
   loadingText: { marginTop: 12, color: '#6b7280', fontSize: 14 },
 
   // Search
-  searchContainer: { position: 'absolute', top: 56, left: 16, right: 16 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 10 },
+  searchContainer: { marginHorizontal: 16, marginTop: 10, marginBottom: 10 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
   searchIcon: { fontSize: 16, marginRight: 8 },
   searchInput: { flex: 1, fontSize: 15, color: '#111827' },
   searchClear: { fontSize: 14, color: '#9ca3af', paddingLeft: 8 },
 
   // Filters
-  filterWrapper: { position: 'absolute', top: 118, left: 0, right: 0 },
+  filterWrapper: { marginBottom: 8 },
   filterBar: { paddingHorizontal: 16, gap: 8 },
-  filterChip: { backgroundColor: '#fff', borderRadius: 20, paddingVertical: 7, paddingHorizontal: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
+  filterChip: { backgroundColor: '#fff', borderRadius: 20, paddingVertical: 7, paddingHorizontal: 16, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
   filterChipActive: { backgroundColor: '#16a34a' },
   filterChipText: { fontSize: 13, color: '#374151', fontWeight: '500' },
   filterChipTextActive: { color: '#fff', fontWeight: '700' },
 
-  // Count badge
-  countBadge: { position: 'absolute', bottom: 32, left: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 14 },
-  countText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  nearbyListWrap: { position: 'absolute', bottom: 150, left: 0, right: 0 },
-  nearbyListContent: { paddingHorizontal: 12, gap: 8 },
-  nearbyChip: { width: 180, backgroundColor: '#fff', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#e2e8f0' },
-  nearbyChipTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
-  nearbyChipSub: { fontSize: 11, color: '#64748b', marginTop: 3 },
-  profileBtn: {
-    position: 'absolute',
-    top: 170,
-    right: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    elevation: 6,
-  },
-  profileBtnText: { fontSize: 16 },
-  suggestionBtn: {
-    position: 'absolute',
-    top: 224,
-    right: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    elevation: 6,
-  },
-  suggestionBtnText: { fontSize: 16 },
+  // Header
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 12, backgroundColor: '#fff', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#16a34a' },
+  headerRight: { flexDirection: 'row', gap: 8 },
+  headerIconBtn: { backgroundColor: '#f0fdf4', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10 },
+  headerIconBtnText: { fontSize: 16 },
 
   // Back button
-  backBtn: { 
-    position: 'absolute', 
-    top: 170,  // ✅ Moved below filters
-    left: 16, 
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    elevation: 6,
-    zIndex: 50,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-  },
-  backBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#059669',
-  },
+  backBtn: { backgroundColor: '#f0fdf4', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14 },
+  backBtnText: { fontSize: 14, fontWeight: '600', color: '#059669' },
 
-  // Pin
-  pin: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 2.5, borderColor: '#fff', elevation: 4 },
-  pinText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  // Count row
+  countRow: { paddingHorizontal: 16, paddingVertical: 8 },
+  countText: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
 
-  // Doctor card
+  // List
+  listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24 },
+
+  // List doctor card
+  listCard: { backgroundColor: '#fff', borderRadius: 18, padding: 14, marginBottom: 12, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
+  listCardHeader: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  listCardPhoto: { width: 72, height: 72, borderRadius: 14 },
+  listCardPhotoPlaceholder: { backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center' },
+  listCardPhotoIcon: { fontSize: 24 },
+  listCardInfo: { flex: 1 },
+  listCardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  listCardName: { fontSize: 16, fontWeight: '800', color: '#111827', flex: 1, marginRight: 6 },
+  listCardRatingBadge: { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 4 },
+  listCardRatingText: { color: '#b45309', fontSize: 11, fontWeight: '700' },
+  listCardSpecialty: { fontSize: 13, color: '#6b7280', marginTop: 3 },
+  listCardMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
+  listCardStatusDot: { width: 8, height: 8, borderRadius: 4 },
+  listCardStatusText: { fontSize: 12, fontWeight: '600', marginLeft: 5 },
+  listCardDistance: { fontSize: 12, color: '#059669', fontWeight: '500' },
+  listCardCost: { fontSize: 12, color: '#374151', marginTop: 5, fontWeight: '500' },
+  listCardActions: { flexDirection: 'row', gap: 8 },
+  listGoBtn: { flex: 1, backgroundColor: '#eff6ff', borderWidth: 1.5, borderColor: '#3b82f6', paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
+  listGoBtnText: { color: '#1d4ed8', fontWeight: '700', fontSize: 13 },
+  listBookBtn: { flex: 1, backgroundColor: '#16a34a', paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
+  listBookBtnDisabled: { backgroundColor: '#e5e7eb' },
+  listBookBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  listBookBtnTextDisabled: { color: '#9ca3af' },
+  listRateBtn: { flex: 1, backgroundColor: '#f0fdf4', borderWidth: 1.5, borderColor: '#16a34a', paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
+  listRateBtnText: { color: '#16a34a', fontWeight: '700', fontSize: 13 },
+
+  // Empty state
+  emptyWrap: { alignItems: 'center', paddingTop: 60 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyText: { fontSize: 17, fontWeight: '700', color: '#374151', marginBottom: 6 },
+  emptySubText: { fontSize: 14, color: '#9ca3af', textAlign: 'center', paddingHorizontal: 24 },
+
+  // Doctor card bottom sheet
   cardOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
   cardSheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 44, maxHeight: '85%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
@@ -1095,7 +1123,7 @@ const styles = StyleSheet.create({
   starFilled: { color: '#f59e0b' },
 
   // Appointment banner (A)
-  apptBanner: { position: 'absolute', bottom: 90, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a', borderRadius: 16, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10, overflow: 'hidden' },
+  apptBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a', marginHorizontal: 16, marginTop: 10, marginBottom: 4, borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8, overflow: 'hidden' },
   apptBannerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
   apptBannerIcon: { fontSize: 22, marginRight: 10 },
   apptBannerInfo: { flex: 1 },
