@@ -7,10 +7,8 @@ import { doc, getDoc, addDoc, collection, serverTimestamp, query, where, getDocs
 import { db, auth } from './firebaseConfig';
 
 const SUBSCRIPTION_PLANS = [
-  { id: '1month',  label: '1 Month',  price: 1500, months: 1  },
-  { id: '3months', label: '3 Months', price: 3900, months: 3  },
-  { id: '6months', label: '6 Months', price: 7000, months: 6  },
-  { id: '1year',   label: '1 Year',   price: 12000, months: 12 },
+  { id: '1week',  label: '1 Week',  price: 1500, weeks: 1, months: null },
+  { id: '1month', label: '1 Month', price: 5500, weeks: null, months: 1 },
 ];
 
 export default function SubscriptionPaymentScreen({ navigation }) {
@@ -87,6 +85,7 @@ export default function SubscriptionPaymentScreen({ navigation }) {
                 plan: selectedPlan.id,
                 planLabel: selectedPlan.label,
                 price: selectedPlan.price,
+                weeks: selectedPlan.weeks,
                 months: selectedPlan.months,
                 transactionRef: transactionRef.trim(),
                 status: 'pending',
@@ -199,11 +198,7 @@ export default function SubscriptionPaymentScreen({ navigation }) {
                 <Text style={[styles.planLabel, selectedPlan?.id === plan.id && styles.planLabelSelected]}>
                   {plan.label}
                 </Text>
-                {plan.months >= 6 && (
-                  <Text style={styles.planDiscount}>
-                    {plan.months === 6 ? 'Save ~7%' : 'Save ~20%'}
-                  </Text>
-                )}
+
               </View>
               <Text style={[styles.planPrice, selectedPlan?.id === plan.id && styles.planPriceSelected]}>
                 {plan.price} DA
