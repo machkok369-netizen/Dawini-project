@@ -47,18 +47,25 @@ const handleRegister = async () => {
       createdAt: new Date(),
       isVerified: role === 'patient' ? true : false,
       profileCompleted: false,
-      patientProfileCompleted: false, // ← NEW
+      patientProfileCompleted: false,
+      termsAccepted: false,
     };
 
     await setDoc(doc(db, 'users', user.uid), userData);
 
     Alert.alert("✅ Account Created!", "Welcome to Dawini");
 
-    // ✅ UPDATED NAVIGATION
     if (role === 'patient') {
-      navigation.replace('PatientOnboarding'); // ← Changed from DoctorList
+      navigation.replace('TermsAcceptance', {
+        uid: user.uid,
+        nextScreen: 'PatientOnboarding',
+      });
     } else {
-      navigation.replace('EditProfile', { isNewDoctor: true });
+      navigation.replace('TermsAcceptance', {
+        uid: user.uid,
+        nextScreen: 'EditProfile',
+        nextScreenParams: { isNewDoctor: true },
+      });
     }
   } catch (error) {
     Alert.alert("Registration Failed", error.message);

@@ -38,20 +38,34 @@ export default function LoginScreen({ navigation }) {
         return; 
       }
 
+      // Determine next screen based on role and profile completion
+      let nextScreen, nextScreenParams;
       if (userData.role === 'doctor') {
         if (!userData.profileCompleted) {
-          navigation.replace('EditProfile', { isNewDoctor: true });
+          nextScreen = 'EditProfile';
+          nextScreenParams = { isNewDoctor: true };
         } else {
-          navigation.replace('DoctorDashboard');
+          nextScreen = 'DoctorDashboard';
         }
       } else {
-        // ✅ PATIENT FLOW
         if (!userData.patientProfileCompleted) {
-          navigation.replace('PatientOnboarding'); // ← Check onboarding
+          nextScreen = 'PatientOnboarding';
         } else {
-          navigation.replace('PatientMap');
+          nextScreen = 'PatientMap';
         }
       }
+
+      // Redirect to Terms Acceptance if not yet accepted
+      if (!userData.termsAccepted) {
+        navigation.replace('TermsAcceptance', {
+          uid: userCredential.user.uid,
+          nextScreen,
+          nextScreenParams,
+        });
+        return;
+      }
+
+      navigation.replace(nextScreen, nextScreenParams || {});
     } catch (error) {
       Alert.alert('Login Failed', error.message);
     } finally {

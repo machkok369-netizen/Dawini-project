@@ -5,6 +5,7 @@ import NotificationService from './NotificationService';
 
 import LoginScreen from './LoginScreen';
 import RegisterScreen from './RegisterScreen';
+import TermsAcceptanceScreen from './TermsAcceptanceScreen';
 import PatientOnboardingScreen from './PatientOnboardingScreen';
 import DoctorListScreen from './DoctorListScreen';
 import TrackingScreen from './TrackingScreen';
@@ -44,6 +45,12 @@ export default function App() {
           name="Register"
           component={RegisterScreen}
           options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="TermsAcceptance"
+          component={TermsAcceptanceScreen}
+          options={{ headerShown: false, gestureEnabled: false }}
         />
 
         <Stack.Screen
