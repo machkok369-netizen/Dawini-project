@@ -220,8 +220,8 @@ export default function DoctorListScreen({ navigation }) {
       list = [...list].sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0));
     } else if (sortBy === 'distance' && userLocation) {
       list = [...list].sort((a, b) => {
-        const dA = a.location ? getDistanceKm(userLocation.latitude, userLocation.longitude, a.location.lat, a.location.lng) : 9999;
-        const dB = b.location ? getDistanceKm(userLocation.latitude, userLocation.longitude, b.location.lat, b.location.lng) : 9999;
+        const dA = a.location ? getDistanceKm(userLocation.latitude, userLocation.longitude, a.location.latitude, a.location.longitude) : 9999;
+        const dB = b.location ? getDistanceKm(userLocation.latitude, userLocation.longitude, b.location.latitude, b.location.longitude) : 9999;
         return dA - dB;
       });
     }
@@ -242,7 +242,7 @@ export default function DoctorListScreen({ navigation }) {
     const canNavigate = item.status === 'in_office';
     const isFav = savedDoctors.includes(item.id);
     const dist = userLocation && item.location
-      ? getDistanceKm(userLocation.latitude, userLocation.longitude, item.location.lat, item.location.lng)
+      ? getDistanceKm(userLocation.latitude, userLocation.longitude, item.location.latitude, item.location.longitude)
       : null;
 
     return (

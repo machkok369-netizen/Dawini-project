@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   ActivityIndicator, Alert, TextInput
 } from 'react-native';
-import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 
 const SUBSCRIPTION_PLANS = [
@@ -41,9 +41,14 @@ export default function SubscriptionPaymentScreen({ navigation }) {
         }
 
         // Check for any pending renewal request
-        const reqSnap = await getDoc(doc(db, 'subscription_requests', uid));
-        if (reqSnap.exists() && reqSnap.data().status === 'pending') {
-          setPendingRequest(reqSnap.data());
+        const pendingQ = query(
+          collection(db, 'subscription_requests'),
+          where('doctorId', '==', uid),
+          where('status', '==', 'pending')
+        );
+        const pendingSnap = await getDocs(pendingQ);
+        if (!pendingSnap.empty) {
+          setPendingRequest(pendingSnap.docs[0].data());
         }
       } catch (e) {
         console.log('Load subscription error:', e);
