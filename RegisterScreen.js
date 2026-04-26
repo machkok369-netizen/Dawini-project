@@ -3,8 +3,6 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, 
   Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView 
 } from 'react-native';
-// IMPORTANT: Added these imports so the Map works!
-import MapView, { Marker } from 'react-native-maps'; 
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
@@ -15,13 +13,6 @@ export default function RegisterScreen({ navigation }) {
   const [role, setRole] = useState('patient'); 
   const [specialty, setSpecialty] = useState('');
   const [phone, setPhone] = useState('');
-  const [location, setLocation] = useState({ latitude: 36.2625, longitude: 6.6922 });
-  const [mapRegion, setMapRegion] = useState({
-    latitude: 36.2625, 
-    longitude: 6.6922,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  });
   const [loading, setLoading] = useState(false);
 
 const handleRegister = async () => {
@@ -132,20 +123,6 @@ const handleRegister = async () => {
               value={phone} 
               keyboardType="phone-pad"
             />
-            
-            <Text style={[styles.label, { marginTop: 10 }]}>📍 Pin your Clinic:</Text>
-            <View style={styles.mapViewContainer}>
-              <MapView
-                style={{ flex: 1 }}
-                initialRegion={mapRegion}
-                onRegionChangeComplete={(region) => {
-                  setMapRegion(region);
-                  setLocation({ latitude: region.latitude, longitude: region.longitude });
-                }}
-              >
-                <Marker coordinate={{ latitude: mapRegion.latitude, longitude: mapRegion.longitude }} />
-              </MapView>
-            </View>
           </View>
         )}
 
@@ -180,5 +157,4 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.7 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
   linkText: { textAlign: 'center', marginTop: 20, color: '#2ecc71', fontSize: 16 },
-  mapViewContainer: { height: 200, width: '100%', borderRadius: 10, overflow: 'hidden', marginVertical: 10, borderWidth: 1, borderColor: '#ddd' }
 });
