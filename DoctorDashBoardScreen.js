@@ -11,6 +11,9 @@ import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 
 import { db, auth } from './firebaseConfig';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+import i18n from './i18n';
 
 const STATUS_OPTIONS = [
   { key: 'in_office', label: 'In Office',     labelAr: 'في العيادة',   color: '#16a34a', dot: '#22c55e' },
@@ -22,9 +25,9 @@ const STATUS_OPTIONS = [
 const dateKey = (d) => d.toISOString().split('T')[0];
 const displayDate = (key) => new Date(key).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
-const formatCountdown = (endDate) => {
+const formatCountdown = (endDate, expiredLabel) => {
   const diff = endDate - new Date();
-  if (diff <= 0) return 'Expired';
+  if (diff <= 0) return expiredLabel || 'Expired';
   const days    = Math.floor(diff / 86400000);
   const hours   = Math.floor((diff % 86400000) / 3600000);
   const minutes = Math.floor((diff % 3600000) / 60000);
@@ -78,6 +81,8 @@ const generateQueueHTML = (profile, reservations, dateStr) => `
 
 export default function DoctorDashboardScreen({ navigation }) {
   const uid = auth.currentUser?.uid;
+  const { t } = useTranslation('screens');
+  const { isRTL, language } = useLanguage();
 
   // Guard against session expiry — redirect to login rather than crashing.
   useEffect(() => {
@@ -139,8 +144,8 @@ export default function DoctorDashboardScreen({ navigation }) {
 
   useEffect(() => {
     if (!subscriptionEnd) return;
-    countdownRef.current = setInterval(() => setCountdown(formatCountdown(subscriptionEnd)), 1000);
-    setCountdown(formatCountdown(subscriptionEnd));
+    countdownRef.current = setInterval(() => setCountdown(formatCountdown(subscriptionEnd, t('doctorDashboard.subscriptionExpired'))), 1000);
+    setCountdown(formatCountdown(subscriptionEnd, t('doctorDashboard.subscriptionExpired')));
     return () => clearInterval(countdownRef.current);
   }, [subscriptionEnd]);
 
@@ -167,28 +172,28 @@ export default function DoctorDashboardScreen({ navigation }) {
   const updateStatus = async (s) => {
     const prev = status; setStatus(s);
     try { await updateDoc(doc(db, "users", uid), { status: s }); }
-    catch { Alert.alert("Error", "Could not update status."); setStatus(prev); }
+    catch { Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.updateStatusError')); setStatus(prev); }
   };
 
   const updateAcceptMode = async (m) => {
     setAcceptMode(m);
     try { await updateDoc(doc(db, "users", uid), { acceptMode: m }); }
-    catch { Alert.alert("Error", "Could not update mode."); }
+    catch { Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.updateStatusError')); }
   };
 
   const saveSlot = async (day, val) => {
     const max = parseInt(val);
-    if (!max || max < 1) { Alert.alert("Invalid", "Enter a valid number."); return; }
+    if (!max || max < 1) { Alert.alert(i18n.t('common:invalid'), i18n.t('screens:doctorDashboard.invalidNumber')); return; }
     try {
       await setDoc(doc(db, "slots", `${uid}_${day}`), { doctorId: uid, date: day, max, booked: slots[day]?.booked || 0 });
       setSlots(p => ({ ...p, [day]: { ...p[day], max } }));
       setEditingSlotDate(null);
-    } catch { Alert.alert("Error", "Could not save."); }
+    } catch { Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.updateStatusError')); }
   };
 
   const handleCancel = (item) => {
-    Alert.alert("Cancel Booking", `Cancel ${item.patientName || 'patient'}'s booking?\n\nWhat happens to the freed slot?`, [
-      { text: "Open for next patient", onPress: async () => {
+    Alert.alert(i18n.t('screens:doctorDashboard.cancelBookingTitle'), `${i18n.t('common:cancel')} ${item.patientName || i18n.t('common:patient')}'s booking?\n\n${i18n.t('screens:doctorDashboard.cancelBooking')}?`, [
+      { text: i18n.t('screens:doctorDashboard.openNextPatient'), onPress: async () => {
         await updateDoc(doc(db, "reservations", item.id), { status: 'cancelled' });
         const day = item.date?.toDate ? dateKey(item.date.toDate()) : item.date;
         if (day) {
@@ -198,16 +203,16 @@ export default function DoctorDashboardScreen({ navigation }) {
           } catch {}
         }
       }},
-      { text: "Close the slot", onPress: async () => {
+      { text: i18n.t('screens:doctorDashboard.closeSlot'), onPress: async () => {
         await updateDoc(doc(db, "reservations", item.id), { status: 'cancelled' });
       }},
-      { text: "Go Back", style: "cancel" }
+      { text: i18n.t('screens:doctorDashboard.goBack'), style: "cancel" }
     ]);
   };
 
   const confirmRes = async (id) => {
     try { await updateDoc(doc(db, "reservations", id), { status: 'confirmed' }); }
-    catch { Alert.alert("Error", "Could not confirm."); }
+    catch { Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.confirmError')); }
   };
 
   const exportPDF = async () => {
@@ -219,7 +224,7 @@ export default function DoctorDashboardScreen({ navigation }) {
       const { uri } = await Print.printToFileAsync({ html });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: "Today's Queue" });
     } catch {
-      Alert.alert("Missing packages", "Run: npx expo install expo-print expo-sharing");
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.missingPackages'));
     }
   };
 
@@ -232,30 +237,30 @@ export default function DoctorDashboardScreen({ navigation }) {
 
   const handlePinSubmit = async () => {
     if (pinMode === 'set') {
-      if (pinInput.length < 4) { Alert.alert("Invalid", "PIN must be at least 4 digits."); return; }
+      if (pinInput.length < 4) { Alert.alert(i18n.t('common:invalid'), i18n.t('screens:doctorDashboard.pinTooShort')); return; }
       await updateDoc(doc(db, "users", uid), { assistantPin: pinInput });
       setSavedPin(pinInput);
       setAssistantActive(true);
       setPinModalVisible(false);
     } else {
       if (pinInput === savedPin) { setAssistantActive(true); setPinModalVisible(false); }
-      else { Alert.alert("Wrong PIN", "Incorrect PIN."); setPinInput(''); }
+      else { Alert.alert(i18n.t('screens:doctorDashboard.wrongPIN'), i18n.t('screens:doctorDashboard.wrongPIN')); setPinInput(''); }
     }
   };
 
   const handlePasswordChange = async () => {
-    if (!currentPw || !newPw || !confirmPw) { Alert.alert("Missing", "Fill all fields."); return; }
-    if (newPw !== confirmPw) { Alert.alert("Mismatch", "Passwords don't match."); return; }
-    if (newPw.length < 6) { Alert.alert("Too Short", "Min 6 characters."); return; }
+    if (!currentPw || !newPw || !confirmPw) { Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.fillAllFields')); return; }
+    if (newPw !== confirmPw) { Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.passwordMismatch')); return; }
+    if (newPw.length < 6) { Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.passwordTooShort')); return; }
     try {
       const cred = EmailAuthProvider.credential(auth.currentUser.email, currentPw);
       await reauthenticateWithCredential(auth.currentUser, cred);
       await updatePassword(auth.currentUser, newPw);
-      Alert.alert("Done", "Password updated.");
+      Alert.alert(i18n.t('common:success'), i18n.t('screens:doctorDashboard.passwordUpdated'));
       setPwModalVisible(false);
       setCurrentPw(''); setNewPw(''); setConfirmPw('');
     } catch (e) {
-      Alert.alert("Error", e.code === 'auth/wrong-password' ? "Current password is wrong." : e.message);
+      Alert.alert(i18n.t('common:error'), e.code === 'auth/wrong-password' ? i18n.t('screens:doctorDashboard.wrongPIN') : e.message);
     }
   };
 
@@ -269,18 +274,18 @@ export default function DoctorDashboardScreen({ navigation }) {
   if (loading) return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color="#16a34a" />
-      <Text style={styles.loadingText}>Loading dashboard...</Text>
+      <Text style={styles.loadingText}>{t('doctorDashboard.loading')}</Text>
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
+    <View style={{ flex: 1, backgroundColor: '#f8f9fa', direction: isRTL ? 'rtl' : 'ltr' }}>
       <ScrollView showsVerticalScrollIndicator={false}>
 
         {/* Top Bar */}
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.topBarTitle}>Dashboard</Text>
+            <Text style={styles.topBarTitle}>{t('doctorDashboard.dashboard')}</Text>
             <Text style={styles.topBarSub}>{today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
           </View>
           <View style={styles.topBarRight}>
@@ -289,7 +294,7 @@ export default function DoctorDashboardScreen({ navigation }) {
               style={styles.nearbyBtn}
               onPress={() => navigation.navigate('PatientMap', { isDoctor: true })}
             >
-              <Text style={styles.nearbyBtnText}>Nearby</Text>
+              <Text style={styles.nearbyBtnText}>{t('doctorDashboard.nearby')}</Text>
             </TouchableOpacity>
             {!assistantActive && (
               <TouchableOpacity style={styles.menuBtn} onPress={() => setMenuVisible(true)}>
@@ -300,7 +305,7 @@ export default function DoctorDashboardScreen({ navigation }) {
             )}
             {assistantActive && (
               <View style={styles.assistantBadge}>
-                <Text style={styles.assistantBadgeText}>Assistant</Text>
+                <Text style={styles.assistantBadgeText}>{t('doctorDashboard.assistantMode')}</Text>
               </View>
             )}
           </View>
@@ -309,7 +314,7 @@ export default function DoctorDashboardScreen({ navigation }) {
         {/* Countdown Banner */}
         {subscriptionEnd && (
           <View style={[styles.subBanner, subWarning !== null && subWarning <= 3 && styles.subBannerRed]}>
-            <Text style={styles.subBannerLabel}>{subWarning === 0 ? 'Subscription expired' : 'Free trial ends in'}</Text>
+            <Text style={styles.subBannerLabel}>{subWarning === 0 ? t('doctorDashboard.subscriptionExpired') : t('doctorDashboard.freeTrialEnds')}</Text>
             {subWarning > 0 && <Text style={styles.subBannerCountdown}>{countdown}</Text>}
           </View>
         )}
@@ -338,26 +343,26 @@ export default function DoctorDashboardScreen({ navigation }) {
               <View style={styles.divider} />
               <View style={styles.detailsGrid}>
                 <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>CABINET</Text>
+                  <Text style={styles.detailLabel}>{t('doctorDashboard.cabinetLabel')}</Text>
                   <Text style={styles.detailValue}>{profile?.cabinetName}</Text>
                   {profile?.cabinetNameAr ? <Text style={styles.detailValueAr}>{profile.cabinetNameAr}</Text> : null}
                 </View>
                 <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>PHONE</Text>
+                  <Text style={styles.detailLabel}>{t('doctorDashboard.phoneLabel')}</Text>
                   <Text style={styles.detailValue}>{profile?.phone}</Text>
                 </View>
                 <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>VISIT COST</Text>
+                  <Text style={styles.detailLabel}>{t('doctorDashboard.visitCostLabel')}</Text>
                   <Text style={styles.detailValue}>{profile?.visitCost} DA</Text>
                 </View>
                 <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>MODE</Text>
-                  <Text style={styles.detailValue}>{acceptMode === 'auto' ? 'Auto Accept' : 'Manual'}</Text>
+                  <Text style={styles.detailLabel}>{t('doctorDashboard.modeLabel')}</Text>
+                  <Text style={styles.detailValue}>{acceptMode === 'auto' ? t('doctorDashboard.autoAccept') : t('doctorDashboard.manualApprove')}</Text>
                 </View>
               </View>
               {profile?.equipment ? (
                 <View style={styles.equipmentBox}>
-                  <Text style={styles.detailLabel}>EQUIPMENT</Text>
+                  <Text style={styles.detailLabel}>{t('doctorDashboard.equipmentLabel')}</Text>
                   <Text style={styles.equipmentText}>{profile.equipment}</Text>
                 </View>
               ) : null}
@@ -366,13 +371,13 @@ export default function DoctorDashboardScreen({ navigation }) {
                   {profile.photoEntrance && (
                     <View style={styles.photoThumbWrap}>
                       <Image source={{ uri: profile.photoEntrance }} style={styles.photoThumb} />
-                      <Text style={styles.photoThumbLabel}>Entrance</Text>
+                      <Text style={styles.photoThumbLabel}>{t('doctorDashboard.entrancePhoto')}</Text>
                     </View>
                   )}
                   {profile.photoStreet && (
                     <View style={styles.photoThumbWrap}>
                       <Image source={{ uri: profile.photoStreet }} style={styles.photoThumb} />
-                      <Text style={styles.photoThumbLabel}>Street</Text>
+                      <Text style={styles.photoThumbLabel}>{t('doctorDashboard.streetPhoto')}</Text>
                     </View>
                   )}
                 </View>
@@ -385,8 +390,8 @@ export default function DoctorDashboardScreen({ navigation }) {
         {!assistantActive && (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Current Status</Text>
-              <Text style={styles.sectionSub}>Patients see this in real time</Text>
+              <Text style={styles.sectionTitle}>{t('doctorDashboard.currentStatus')}</Text>
+              <Text style={styles.sectionSub}>{t('doctorDashboard.statusSubtitle')}</Text>
               <View style={styles.statusGrid}>
                 {STATUS_OPTIONS.map(opt => (
                   <TouchableOpacity
@@ -396,7 +401,9 @@ export default function DoctorDashboardScreen({ navigation }) {
                   >
                     <View style={[styles.statusBtnDot, { backgroundColor: opt.dot }]} />
                     <View>
-                      <Text style={[styles.statusBtnLabel, status === opt.key && { color: opt.color, fontWeight: '700' }]}>{opt.label}</Text>
+                      <Text style={[styles.statusBtnLabel, status === opt.key && { color: opt.color, fontWeight: '700' }]}>
+                        {language === 'ar' ? opt.labelAr : opt.label}
+                      </Text>
                       <Text style={styles.statusBtnLabelAr}>{opt.labelAr}</Text>
                     </View>
                   </TouchableOpacity>
@@ -405,15 +412,15 @@ export default function DoctorDashboardScreen({ navigation }) {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Reservation Mode</Text>
+              <Text style={styles.sectionTitle}>{t('doctorDashboard.reservationMode')}</Text>
               <View style={styles.modeRow}>
                 <TouchableOpacity style={[styles.modeBtn, acceptMode === 'auto' && styles.modeBtnActive]} onPress={() => updateAcceptMode('auto')}>
-                  <Text style={[styles.modeBtnText, acceptMode === 'auto' && styles.modeBtnTextActive]}>Auto Accept</Text>
-                  <Text style={styles.modeBtnSub}>Confirmed instantly</Text>
+                  <Text style={[styles.modeBtnText, acceptMode === 'auto' && styles.modeBtnTextActive]}>{t('doctorDashboard.autoAccept')}</Text>
+                  <Text style={styles.modeBtnSub}>{t('doctorDashboard.autoAcceptSub')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.modeBtn, acceptMode === 'manual' && styles.modeBtnActive]} onPress={() => updateAcceptMode('manual')}>
-                  <Text style={[styles.modeBtnText, acceptMode === 'manual' && styles.modeBtnTextActive]}>Manual Approve</Text>
-                  <Text style={styles.modeBtnSub}>You confirm each one</Text>
+                  <Text style={[styles.modeBtnText, acceptMode === 'manual' && styles.modeBtnTextActive]}>{t('doctorDashboard.manualApprove')}</Text>
+                  <Text style={styles.modeBtnSub}>{t('doctorDashboard.manualApproveSub')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -424,12 +431,12 @@ export default function DoctorDashboardScreen({ navigation }) {
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>Assistant Mode</Text>
-              <Text style={styles.sectionSub}>{assistantActive ? 'Active — assistant controls today' : "Hand over today's queue with a PIN"}</Text>
+              <Text style={styles.sectionTitle}>{t('doctorDashboard.assistantMode')}</Text>
+              <Text style={styles.sectionSub}>{assistantActive ? t('doctorDashboard.assistantActive') : t('doctorDashboard.handoverQueue')}</Text>
             </View>
             <TouchableOpacity style={[styles.assistantBtn, assistantActive && styles.assistantBtnActive]} onPress={handleAssistantBtn}>
               <Text style={[styles.assistantBtnText, assistantActive && styles.assistantBtnTextActive]}>
-                {assistantActive ? 'Deactivate' : 'Activate'}
+                {assistantActive ? t('doctorDashboard.deactivate') : t('doctorDashboard.activate')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -439,19 +446,19 @@ export default function DoctorDashboardScreen({ navigation }) {
         <View style={styles.section}>
           <View style={styles.sectionRow}>
             <View>
-              <Text style={styles.sectionTitle}>Today's Queue</Text>
-              <Text style={styles.sectionSub}>{todayQueue.length} patients scheduled</Text>
+              <Text style={styles.sectionTitle}>{t('doctorDashboard.todayQueue')}</Text>
+              <Text style={styles.sectionSub}>{t('doctorDashboard.patientsScheduled', { n: todayQueue.length })}</Text>
             </View>
             {todayQueue.length > 0 && (
               <TouchableOpacity style={styles.exportBtn} onPress={exportPDF}>
-                <Text style={styles.exportBtnText}>Export PDF</Text>
+                <Text style={styles.exportBtnText}>{t('doctorDashboard.exportPDF')}</Text>
               </TouchableOpacity>
             )}
           </View>
           {todayQueue.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No patients scheduled today</Text>
-              {!assistantActive && <Text style={styles.emptySub}>Set status to "In Office" to receive bookings</Text>}
+              <Text style={styles.emptyText}>{t('doctorDashboard.noPatients')}</Text>
+              {!assistantActive && <Text style={styles.emptySub}>{t('doctorDashboard.setStatusHint')}</Text>}
             </View>
           ) : (
             todayQueue.map((item, index) => {
@@ -461,7 +468,7 @@ export default function DoctorDashboardScreen({ navigation }) {
                   <View style={styles.queueNum}><Text style={styles.queueNumText}>{index + 1}</Text></View>
                   <View style={styles.queueTime}><Text style={styles.queueTimeText}>{item.time || '--:--'}</Text></View>
                   <View style={styles.queueInfo}>
-                    <Text style={styles.queueName}>{item.patientName || 'Patient'}</Text>
+                    <Text style={styles.queueName}>{item.patientName || i18n.t('common:patient')}</Text>
                     <Text style={styles.queuePhone}>{item.patientPhone || '—'}</Text>
                     {item.note ? <Text style={styles.queueNote}>{item.note}</Text> : null}
                   </View>
@@ -469,11 +476,11 @@ export default function DoctorDashboardScreen({ navigation }) {
                     <View style={[styles.queueDot, { backgroundColor: sc }]} />
                     {item.status === 'pending' && (
                       <TouchableOpacity onPress={() => confirmRes(item.id)}>
-                        <Text style={styles.queueConfirm}>Confirm</Text>
+                        <Text style={styles.queueConfirm}>{i18n.t('common:confirm')}</Text>
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity onPress={() => handleCancel(item)}>
-                      <Text style={styles.queueCancel}>Cancel</Text>
+                      <Text style={styles.queueCancel}>{i18n.t('common:cancel')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -485,8 +492,8 @@ export default function DoctorDashboardScreen({ navigation }) {
         {/* Calendar Slot Manager (F) */}
         {!assistantActive && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Calendar & Slots</Text>
-            <Text style={styles.sectionSub}>Tap a day to manage its capacity</Text>
+            <Text style={styles.sectionTitle}>{t('doctorDashboard.calendarTitle')}</Text>
+            <Text style={styles.sectionSub}>{t('doctorDashboard.calendarHint')}</Text>
 
             {/* Horizontal 14-day calendar strip */}
             <ScrollView
@@ -501,8 +508,8 @@ export default function DoctorDashboardScreen({ navigation }) {
                 const fc = available === 0 ? '#dc2626' : available <= 3 ? '#d97706' : '#16a34a';
                 const isSelected = (selectedCalendarDay || todayKey) === day;
                 const d = new Date(day);
-                const dayName = day === todayKey ? 'Today'
-                  : day === calendarDays[1] ? 'Tomorrow'
+                const dayName = day === todayKey ? i18n.t('common:today')
+                  : day === calendarDays[1] ? i18n.t('common:tomorrow')
                   : d.toLocaleDateString('en-GB', { weekday: 'short' });
                 const dayNum = d.getDate();
                 return (
@@ -529,7 +536,7 @@ export default function DoctorDashboardScreen({ navigation }) {
               const fc = available === 0 ? '#dc2626' : available <= 3 ? '#d97706' : '#16a34a';
               const isEditing = editingSlotDate === day;
               const d = new Date(day);
-              const label = day === todayKey ? 'Today'
+              const label = day === todayKey ? i18n.t('common:today')
                 : d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
               return (
                 <View style={styles.slotCard}>
@@ -555,15 +562,15 @@ export default function DoctorDashboardScreen({ navigation }) {
                         autoFocus
                       />
                       <TouchableOpacity style={styles.slotSaveBtn} onPress={() => saveSlot(day, newSlotValue)}>
-                        <Text style={styles.slotSaveBtnText}>Save</Text>
+                        <Text style={styles.slotSaveBtnText}>{i18n.t('common:save')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.slotBackBtn} onPress={() => setEditingSlotDate(null)}>
-                        <Text style={styles.slotBackBtnText}>Back</Text>
+                        <Text style={styles.slotBackBtnText}>{i18n.t('common:back')}</Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
                     <TouchableOpacity style={styles.slotEditBtn} onPress={() => { setNewSlotValue(s.max.toString()); setEditingSlotDate(day); }}>
-                      <Text style={styles.slotEditBtnText}>Change slots</Text>
+                      <Text style={styles.slotEditBtnText}>{t('doctorDashboard.changeSlots')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -575,9 +582,9 @@ export default function DoctorDashboardScreen({ navigation }) {
         {/* All Reservations */}
         {!assistantActive && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>All Reservations ({reservations.length})</Text>
+            <Text style={styles.sectionTitle}>{t('doctorDashboard.allReservations', { n: reservations.length })}</Text>
             {reservations.length === 0 ? (
-              <View style={styles.emptyBox}><Text style={styles.emptyText}>No reservations yet</Text></View>
+              <View style={styles.emptyBox}><Text style={styles.emptyText}>{t('doctorDashboard.noReservations')}</Text></View>
             ) : (
               reservations.map(item => {
                 const dateStr = item.date?.toDate ? item.date.toDate().toLocaleDateString('en-GB') : item.date;
@@ -585,7 +592,7 @@ export default function DoctorDashboardScreen({ navigation }) {
                 return (
                   <View key={item.id} style={styles.resCard}>
                     <View style={styles.resCardTop}>
-                      <Text style={styles.resCardName}>{item.patientName || 'Patient'}</Text>
+                      <Text style={styles.resCardName}>{item.patientName || i18n.t('common:patient')}</Text>
                       <View style={[styles.resCardBadge, { backgroundColor: sc + '18', borderColor: sc }]}>
                         <Text style={[styles.resCardBadgeText, { color: sc }]}>{item.status || 'pending'}</Text>
                       </View>
@@ -595,16 +602,16 @@ export default function DoctorDashboardScreen({ navigation }) {
                     {item.status === 'pending' && (
                       <View style={styles.resCardActions}>
                         <TouchableOpacity style={styles.resConfirmBtn} onPress={() => confirmRes(item.id)}>
-                          <Text style={styles.resConfirmText}>Confirm</Text>
+                          <Text style={styles.resConfirmText}>{i18n.t('common:confirm')}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.resCancelBtnStyle} onPress={() => handleCancel(item)}>
-                          <Text style={styles.resCancelText}>Cancel</Text>
+                          <Text style={styles.resCancelText}>{i18n.t('common:cancel')}</Text>
                         </TouchableOpacity>
                       </View>
                     )}
                     {item.status === 'confirmed' && (
                       <TouchableOpacity style={[styles.resCancelBtnStyle, { marginTop: 8 }]} onPress={() => handleCancel(item)}>
-                        <Text style={styles.resCancelText}>Cancel booking</Text>
+                        <Text style={styles.resCancelText}>{t('doctorDashboard.cancelBooking')}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -621,38 +628,38 @@ export default function DoctorDashboardScreen({ navigation }) {
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
           <View style={styles.menuSheet}>
-            <Text style={styles.menuTitle}>Settings</Text>
+            <Text style={styles.menuTitle}>{t('doctorDashboard.settingsTitle')}</Text>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('SubscriptionPayment'); }}>
-              <Text style={styles.menuItemText}>💳 Renew Subscription</Text>
-              <Text style={styles.menuItemSub}>Pay via El Dahabya to extend your plan</Text>
+              <Text style={styles.menuItemText}>💳 {t('doctorDashboard.renewSubscription')}</Text>
+              <Text style={styles.menuItemSub}>{t('doctorDashboard.renewSubscriptionSub')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('EditProfile', { isNewDoctor: false }); }}>
-              <Text style={styles.menuItemText}>Edit Profile</Text>
-              <Text style={styles.menuItemSub}>Update clinic info, photos, specialty</Text>
+              <Text style={styles.menuItemText}>{t('doctorDashboard.editProfile')}</Text>
+              <Text style={styles.menuItemSub}>{t('doctorDashboard.editProfileSub')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); setPinMode(savedPin ? 'enter' : 'set'); setPinInput(''); setPinModalVisible(true); }}>
-              <Text style={styles.menuItemText}>Assistant PIN</Text>
-              <Text style={styles.menuItemSub}>{savedPin ? 'Change existing PIN' : 'Set up assistant PIN'}</Text>
+              <Text style={styles.menuItemText}>{t('doctorDashboard.assistantPIN')}</Text>
+              <Text style={styles.menuItemSub}>{savedPin ? t('doctorDashboard.changePIN') : t('doctorDashboard.setupPIN')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); setPwModalVisible(true); }}>
-              <Text style={styles.menuItemText}>Change Password</Text>
-              <Text style={styles.menuItemSub}>Update your account password</Text>
+              <Text style={styles.menuItemText}>{t('doctorDashboard.changePassword')}</Text>
+              <Text style={styles.menuItemSub}>{t('doctorDashboard.changePasswordSub')}</Text>
             </TouchableOpacity>
       <TouchableOpacity 
         style={[styles.menuItem, { borderBottomWidth: 0 }]} 
         onPress={async () => {
           try {
             Alert.alert(
-              "Sign Out",
-              "Are you sure you want to sign out?",
+              i18n.t('screens:doctorDashboard.signOutTitle'),
+              i18n.t('screens:doctorDashboard.signOutMsg'),
               [
                 {
-                  text: "Cancel",
+                  text: i18n.t('common:cancel'),
                   onPress: () => {},
                   style: "cancel"
                 },
                 {
-                  text: "Sign Out",
+                  text: i18n.t('screens:doctorDashboard.signOut'),
                   onPress: async () => {
                     setMenuVisible(false);
                     await auth.signOut();
@@ -666,11 +673,11 @@ export default function DoctorDashboardScreen({ navigation }) {
               ]
             );
           } catch (error) {
-            Alert.alert("Error", "Could not sign out: " + error.message);
+            Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorDashboard.updateStatusError') + error.message);
           }
         }}
       >
-        <Text style={[styles.menuItemText, { color: '#dc2626' }]}>🚪 Sign Out</Text>
+        <Text style={[styles.menuItemText, { color: '#dc2626' }]}>🚪 {t('doctorDashboard.signOut')}</Text>
       </TouchableOpacity>
     </View>
   </TouchableOpacity>
@@ -680,14 +687,14 @@ export default function DoctorDashboardScreen({ navigation }) {
       <Modal visible={pinModalVisible} transparent animationType="slide" onRequestClose={() => setPinModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>{pinMode === 'set' ? 'Set Assistant PIN' : 'Enter Assistant PIN'}</Text>
-            <Text style={styles.modalSub}>{pinMode === 'set' ? 'Create a PIN for your assistant' : 'Enter PIN to activate assistant mode'}</Text>
-            <TextInput style={styles.modalInput} value={pinInput} onChangeText={setPinInput} keyboardType="numeric" secureTextEntry maxLength={8} placeholder="Enter PIN" autoFocus />
+            <Text style={styles.modalTitle}>{pinMode === 'set' ? t('doctorDashboard.setPIN') : t('doctorDashboard.enterPIN')}</Text>
+            <Text style={styles.modalSub}>{pinMode === 'set' ? t('doctorDashboard.setPINSubtitle') : t('doctorDashboard.enterPINSubtitle')}</Text>
+            <TextInput style={styles.modalInput} value={pinInput} onChangeText={setPinInput} keyboardType="numeric" secureTextEntry maxLength={8} placeholder={t('doctorDashboard.enterPINLabel')} autoFocus />
             <TouchableOpacity style={styles.modalBtn} onPress={handlePinSubmit}>
-              <Text style={styles.modalBtnText}>{pinMode === 'set' ? 'Set PIN' : 'Unlock'}</Text>
+              <Text style={styles.modalBtnText}>{pinMode === 'set' ? t('doctorDashboard.setPINBtn') : t('doctorDashboard.unlockBtn')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setPinModalVisible(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{i18n.t('common:cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -697,15 +704,15 @@ export default function DoctorDashboardScreen({ navigation }) {
       <Modal visible={pwModalVisible} transparent animationType="slide" onRequestClose={() => setPwModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Change Password</Text>
-            <TextInput style={styles.modalInput} value={currentPw} onChangeText={setCurrentPw} secureTextEntry placeholder="Current password" />
-            <TextInput style={styles.modalInput} value={newPw} onChangeText={setNewPw} secureTextEntry placeholder="New password" />
-            <TextInput style={styles.modalInput} value={confirmPw} onChangeText={setConfirmPw} secureTextEntry placeholder="Confirm new password" />
+            <Text style={styles.modalTitle}>{t('doctorDashboard.changePasswordTitle')}</Text>
+            <TextInput style={styles.modalInput} value={currentPw} onChangeText={setCurrentPw} secureTextEntry placeholder={t('doctorDashboard.currentPasswordPlaceholder')} />
+            <TextInput style={styles.modalInput} value={newPw} onChangeText={setNewPw} secureTextEntry placeholder={t('doctorDashboard.newPasswordPlaceholder')} />
+            <TextInput style={styles.modalInput} value={confirmPw} onChangeText={setConfirmPw} secureTextEntry placeholder={t('doctorDashboard.confirmPasswordPlaceholder')} />
             <TouchableOpacity style={styles.modalBtn} onPress={handlePasswordChange}>
-              <Text style={styles.modalBtnText}>Update Password</Text>
+              <Text style={styles.modalBtnText}>{t('doctorDashboard.updatePassword')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setPwModalVisible(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{i18n.t('common:cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>

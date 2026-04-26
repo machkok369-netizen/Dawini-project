@@ -8,6 +8,9 @@ import {
 import { collection, query, getDocs, doc, updateDoc, serverTimestamp, getDoc, where, arrayUnion, arrayRemove } from 'firebase/firestore'; 
 import { db, auth } from './firebaseConfig';
 import * as Location from 'expo-location';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+import i18n from './i18n';
 
 const emojiMap = {
   '🦷': ['dentiste', 'طبيب أسنان', 'اسنان', 'dentaire', 'teeth'],
@@ -60,6 +63,8 @@ const SORT_OPTIONS = [
 ];
 
 export default function DoctorListScreen({ navigation }) {
+  const { t } = useTranslation('screens');
+  const { isRTL } = useLanguage();
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,7 +128,7 @@ export default function DoctorListScreen({ navigation }) {
       } catch (error) {
         console.log('Doctors fetch error:', error);
         if (isMounted) {
-          Alert.alert('Error', 'Failed to load doctors');
+          Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorList.loadError'));
           setLoading(false);
         }
       }
@@ -152,14 +157,14 @@ export default function DoctorListScreen({ navigation }) {
     } catch (e) {
       // Revert on error
       setSavedDoctors(savedDoctors);
-      Alert.alert('Error', 'Could not update favorites');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:doctorList.loadError'));
     }
   }, [savedDoctors]);
 
   const handleStartJourney = async (doctor) => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert("Permission Denied", "We need GPS to track the journey!");
+      Alert.alert(i18n.t('common:permissionDenied'), i18n.t('screens:doctorList.gpsError'));
       return;
     }
     await Location.watchPositionAsync(
@@ -271,7 +276,7 @@ export default function DoctorListScreen({ navigation }) {
           <Text style={[styles.status, { color: statusInfo.color }]}>{statusInfo.label}</Text>
           {canNavigate && (
             <TouchableOpacity style={styles.onWayBtn} onPress={() => handleStartJourney(item)}>
-              <Text style={styles.btnText}>🗺️ Get Directions</Text>
+              <Text style={styles.btnText}>🗺️ {t('doctorList.getDirections')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -280,20 +285,20 @@ export default function DoctorListScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>Dawini 🏥</Text>
+    <View style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}>
+      <Text style={styles.logo}>{t('doctorList.appName')}</Text>
 
       {/* Search + Filter row */}
       <View style={styles.searchRow}>
         <TextInput 
           style={styles.search} 
-          placeholder="Search 🦷, Specialty, or Name..." 
+          placeholder={t('doctorList.searchPlaceholder')}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         <TouchableOpacity style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]} onPress={() => setFilterVisible(true)}>
           <Text style={[styles.filterBtnText, activeFilterCount > 0 && styles.filterBtnTextActive]}>
-            {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Filters'}
+            {activeFilterCount > 0 ? t('doctorList.filtersActive', { n: activeFilterCount }) : t('doctorList.filtersLabel')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -307,7 +312,7 @@ export default function DoctorListScreen({ navigation }) {
           keyExtractor={item => item.id}
           ListEmptyComponent={
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No doctors match your search</Text>
+              <Text style={styles.emptyText}>{t('doctorList.noResults')}</Text>
             </View>
           }
         />
@@ -319,7 +324,7 @@ export default function DoctorListScreen({ navigation }) {
           style={styles.doctorFloatingBtn} 
           onPress={() => navigation.navigate('DoctorDashboard')}
         >
-          <Text style={styles.doctorBtnText}>🩺 My Dashboard</Text>
+          <Text style={styles.doctorBtnText}>🩺 {t('doctorList.myDashboard')}</Text>
         </TouchableOpacity>
       )}
 
@@ -329,7 +334,7 @@ export default function DoctorListScreen({ navigation }) {
           style={styles.adminFloatingBtn} 
           onPress={() => navigation.navigate('Admin')}
         >
-          <Text style={styles.adminBtnText}>🛡️ Admin</Text>
+          <Text style={styles.adminBtnText}>🛡️ {t('doctorList.adminPanel')}</Text>
         </TouchableOpacity>
       )}
 
@@ -337,10 +342,10 @@ export default function DoctorListScreen({ navigation }) {
       <Modal visible={filterVisible} transparent animationType="slide" onRequestClose={() => setFilterVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setFilterVisible(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.filterSheet}>
-            <Text style={styles.filterTitle}>Filters & Sort</Text>
+            <Text style={styles.filterTitle}>{t('doctorList.filtersTitle')}</Text>
 
             {/* Specialty */}
-            <Text style={styles.filterLabel}>Specialty</Text>
+            <Text style={styles.filterLabel}>{t('doctorList.specialtyLabel')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
               {SPECIALTIES.map(s => (
                 <TouchableOpacity
@@ -354,7 +359,7 @@ export default function DoctorListScreen({ navigation }) {
             </ScrollView>
 
             {/* Min Rating */}
-            <Text style={styles.filterLabel}>Minimum Rating</Text>
+            <Text style={styles.filterLabel}>{t('doctorList.minRatingLabel')}</Text>
             <View style={styles.chipRow}>
               {MIN_RATINGS.map(r => (
                 <TouchableOpacity
@@ -372,12 +377,12 @@ export default function DoctorListScreen({ navigation }) {
               style={[styles.toggleRow, filterAvailableNow && styles.toggleRowActive]}
               onPress={() => setFilterAvailableNow(v => !v)}
             >
-              <Text style={styles.toggleLabel}>🟢 Available now only</Text>
+              <Text style={styles.toggleLabel}>🟢 {t('doctorList.availableNow')}</Text>
               <Text style={styles.toggleSwitch}>{filterAvailableNow ? '✅' : '⬜'}</Text>
             </TouchableOpacity>
 
             {/* Sort */}
-            <Text style={styles.filterLabel}>Sort By</Text>
+            <Text style={styles.filterLabel}>{t('doctorList.sortByLabel')}</Text>
             <View style={styles.chipRow}>
               {SORT_OPTIONS.map(opt => (
                 <TouchableOpacity
@@ -398,10 +403,10 @@ export default function DoctorListScreen({ navigation }) {
                 setFilterAvailableNow(false);
                 setSortBy('default');
               }}>
-                <Text style={styles.resetBtnText}>Reset</Text>
+                <Text style={styles.resetBtnText}>{t('doctorList.reset')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.applyBtn} onPress={() => setFilterVisible(false)}>
-                <Text style={styles.applyBtnText}>Apply</Text>
+                <Text style={styles.applyBtnText}>{t('doctorList.apply')}</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>

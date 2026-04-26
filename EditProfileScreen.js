@@ -10,6 +10,9 @@ import * as Location from 'expo-location';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebaseConfig';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+import i18n from './i18n';
 
 const SPECIALTIES = [
   'General Practitioner', 'Dentist', 'Cardiologist', 'Pediatrician',
@@ -40,13 +43,15 @@ const uploadPhoto = async (uri, path) => {
     return downloadURL;
   } catch (e) {
     console.log("Upload error:", e.message);
-    Alert.alert("Upload Error", "Please check your internet connection");
+    Alert.alert(i18n.t('common:error'), i18n.t('screens:editProfile.uploadError'));
     return null;
   }
 };
 
 export default function EditProfileScreen({ navigation, route }) {
   const isNewDoctor = route?.params?.isNewDoctor || false;
+  const { t } = useTranslation('screens');
+  const { isRTL } = useLanguage();
 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -114,7 +119,7 @@ export default function EditProfileScreen({ navigation, route }) {
         }
       } catch (e) {
         console.log(e);
-        Alert.alert("Error", "Failed to load profile");
+        Alert.alert(i18n.t('common:error'), i18n.t('screens:editProfile.loadError'));
       } finally {
         setLoading(false);
       }
@@ -132,7 +137,7 @@ export default function EditProfileScreen({ navigation, route }) {
       });
       if (!result.canceled) setter(result.assets[0].uri);
     } catch (e) {
-      Alert.alert("Error", "Failed to pick image");
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:editProfile.imageError'));
     }
   };
 
@@ -143,11 +148,11 @@ export default function EditProfileScreen({ navigation, route }) {
   const saveProfile = async () => {
     const finalSpecialty = getFinalSpecialty();
     if (!doctorName || !cabinetName || !finalSpecialty || !phone || !visitCost || !photoMain) {
-      Alert.alert("Missing Fields", "Please complete all required fields");
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:editProfile.missingFields'));
       return;
     }
     if (!validateAlgerianPhone(phone)) {
-      Alert.alert("Invalid Phone", "Use Algerian format: 05xxxxxxxx");
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:editProfile.invalidPhone'));
       return;
     }
 
@@ -201,15 +206,15 @@ export default function EditProfileScreen({ navigation, route }) {
       await updateDoc(doc(db, "users", uid), updateData);
 
       if (!existingData.profileCompleted) {
-        Alert.alert("✅ Success!", "Your clinic profile is live!\n40 days free trial activated");
+        Alert.alert("✅", i18n.t('screens:editProfile.successNew'));
         navigation.replace('DoctorDashboard');
       } else {
-        Alert.alert("✅ Updated", "Your profile has been saved");
+        Alert.alert("✅", i18n.t('screens:editProfile.successUpdate'));
         navigation.goBack();
       }
     } catch (error) {
       console.log("Save error:", error);
-      Alert.alert("Error", error.message);
+      Alert.alert(i18n.t('common:error'), error.message);
     } finally {
       setUploading(false);
     }
@@ -219,21 +224,21 @@ export default function EditProfileScreen({ navigation, route }) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#059669" />
-        <Text style={styles.loadingText}>Loading your profile...</Text>
+        <Text style={styles.loadingText}>{t('editProfile.loading')}</Text>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerGradient}>
             <Text style={styles.headerIcon}>🏥</Text>
-            <Text style={styles.headerTitle}>{isNewDoctor ? 'Welcome, Doctor' : 'Your Clinic Profile'}</Text>
-            <Text style={styles.headerSubtitle}>Professional Setup</Text>
+            <Text style={styles.headerTitle}>{isNewDoctor ? t('editProfile.newDoctorTitle') : t('editProfile.existingTitle')}</Text>
+            <Text style={styles.headerSubtitle}>{t('editProfile.newDoctorSubtitle')}</Text>
           </View>
         </View>
 
@@ -243,10 +248,10 @@ export default function EditProfileScreen({ navigation, route }) {
             <Text style={styles.subscriptionIcon}>{showWarning ? '⚠️' : '✅'}</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.subscriptionTitle}>
-                {showWarning ? `Ends in ${daysLeft} days` : `${daysLeft} days left`}
+                {showWarning ? t('editProfile.subscriptionEndsIn', { n: daysLeft }) : t('editProfile.daysLeft', { n: daysLeft })}
               </Text>
               <Text style={styles.subscriptionText}>
-                {showWarning ? 'Renew soon to keep your clinic active' : 'Free trial active'}
+                {showWarning ? t('editProfile.renewSoon') : t('editProfile.freeTrial')}
               </Text>
             </View>
           </View>
@@ -254,16 +259,16 @@ export default function EditProfileScreen({ navigation, route }) {
 
         {/* Main Photo Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📸 Clinic Display Photo</Text>
-          <Text style={styles.sectionHint}>This is what patients see first</Text>
+          <Text style={styles.sectionTitle}>📸 {t('editProfile.displayPhotoTitle')}</Text>
+          <Text style={styles.sectionHint}>{t('editProfile.displayPhotoSub')}</Text>
           <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setPhotoMain)}>
             {photoMain ? (
               <Image source={{ uri: photoMain }} style={styles.img} />
             ) : (
               <View style={styles.imgPlaceholderBox}>
                 <Text style={styles.imgIcon}>📷</Text>
-                <Text style={styles.imgPlaceholder}>Tap to upload clinic photo</Text>
-                <Text style={styles.imgHint}>Recommended: Clear, well-lit interior</Text>
+                <Text style={styles.imgPlaceholder}>{t('editProfile.tapToUpload')}</Text>
+                <Text style={styles.imgHint}>{t('editProfile.photoRecommend')}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -271,13 +276,13 @@ export default function EditProfileScreen({ navigation, route }) {
 
         {/* Doctor Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>👨‍⚕️ Your Information</Text>
+          <Text style={styles.sectionTitle}>👨‍⚕️ {t('editProfile.yourInfoTitle')}</Text>
           
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Full Name (English) <Text style={styles.required}>*</Text></Text>
+            <Text style={styles.label}>{t('editProfile.fullNameLabel')} <Text style={styles.required}>*</Text></Text>
             <TextInput
               style={[styles.input, !isFirstTime && styles.inputDisabled]}
-              placeholder="Dr. Ahmed Benali"
+              placeholder={t('editProfile.fullNamePlaceholder')}
               value={doctorName}
               onChangeText={setDoctorName}
               editable={isFirstTime}

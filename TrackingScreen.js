@@ -4,8 +4,10 @@ import MapView, { Marker } from 'react-native-maps';
 import { doc, onSnapshot } from 'firebase/firestore';
 import * as Location from 'expo-location';
 import { db } from './firebaseConfig';
+import { useTranslation } from 'react-i18next';
 
 export default function TrackingScreen({ route }) {
+  const { t } = useTranslation('screens');
   const targetDoctor = route?.params?.doctor || null;
   const tripUserId = route?.params?.tripUserId || null;
   const [patientLocation, setPatientLocation] = useState(null);
@@ -65,13 +67,13 @@ export default function TrackingScreen({ route }) {
       >
         <Marker 
           coordinate={doctorLocation} 
-          title={targetDoctor?.fullName ? `Dr. ${targetDoctor.fullName}` : "Doctor"}
-          description="Doctor destination"
+          title={targetDoctor?.fullName ? `Dr. ${targetDoctor.fullName}` : t('tracking.doctorDestination')}
+          description={t('tracking.doctorDestination')}
         />
         {patientLocation && (
           <Marker
             coordinate={patientLocation}
-            title="You"
+            title={t('tracking.you')}
             pinColor="green"
           />
         )}

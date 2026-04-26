@@ -6,6 +6,210 @@ import {
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+
+export default function LoginScreen({ navigation }) {
+  const { t } = useTranslation('screens');
+  const { language, setLanguage, isRTL } = useLanguage();
+  const [mode, setMode] = useState('email');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleEmailLogin = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !password) {
+      Alert.alert(t('login.errorEmptyFields'), t('login.errorEmptyFields'));
+      return;
+    }
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert(t('login.errorInvalidEmail'), t('login.errorInvalidEmail'));
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert(t('login.errorShortPassword'), t('login.errorShortPassword'));
+      return;
+    }
+    setLoading(true);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      const userData = userDoc.data();
+
+      if (!userData) { 
+        Alert.alert(t('login.errorEmptyFields'), t('login.errorEmptyFields')); 
+        return; 
+      }
+
+      // Determine next screen based on role and profile completion
+      let nextScreen, nextScreenParams;
+      if (userData.role === 'doctor') {
+        if (!userData.profileCompleted) {
+          nextScreen = 'EditProfile';
+          nextScreenParams = { isNewDoctor: true };
+        } else {
+          nextScreen = 'DoctorDashboard';
+        }
+      } else {
+        if (!userData.patientProfileCompleted) {
+          nextScreen = 'PatientOnboarding';
+        } else {
+          nextScreen = 'PatientMap';
+        }
+      }
+
+      // Redirect to Terms Acceptance if not yet accepted
+      if (!userData.termsAccepted) {
+        navigation.replace('TermsAcceptance', {
+          uid: userCredential.user.uid,
+          nextScreen,
+          nextScreenParams,
+        });
+        return;
+      }
+
+      navigation.replace(nextScreen, nextScreenParams || {});
+    } catch (error) {
+      Alert.alert(t('login.title'), error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={[styles.langPicker, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
+            onPress={() => setLanguage('en')}
+          >
+            <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>English</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'ar' && styles.langBtnActive]}
+            onPress={() => setLanguage('ar')}
+          >
+            <Text style={[styles.langBtnText, language === 'ar' && styles.langBtnTextActive]}>عربي</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.logo}>{t('login.title')}</Text>
+        <Text style={styles.tagline}>{t('login.subtitle')}</Text>
+
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            style={[styles.toggleButton, mode === 'email' && styles.activeToggle]}
+            onPress={() => setMode('email')}
+          >
+            <Text style={[styles.toggleText, mode === 'email' && styles.activeText]}>{t('login.emailPlaceholder')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleButton, mode === 'phone' && styles.activeToggle]}
+            onPress={() => setMode('phone')}
+          >
+            <Text style={[styles.toggleText, mode === 'phone' && styles.activeText]}>{t('login.passwordPlaceholder')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {mode === 'email' && (
+          <View style={styles.formContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder={t('login.emailPlaceholder')}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder={t('login.passwordPlaceholder')}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleEmailLogin}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('login.loginBtn')}</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {mode === 'phone' && (
+          <View style={styles.formContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="+213 5XX XXX XXX"
+              keyboardType="phone-pad"
+            />
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => Alert.alert('Coming Soon', 'Phone login will be added later.')}
+            >
+              <Text style={styles.buttonText}>Send OTP</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <TouchableOpacity style={styles.registerContainer} onPress={() => navigation.navigate('Register')}>
+          <Text style={styles.linkText}>
+            {t('login.noAccount')} <Text style={styles.registerLink}>{t('login.register')}</Text>
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  logo: { fontSize: 42, fontWeight: '900', textAlign: 'center', marginBottom: 6, color: '#16a34a', letterSpacing: -1 },
+  tagline: { fontSize: 14, color: '#9ca3af', textAlign: 'center', marginBottom: 40 },
+  toggleContainer: { flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 12, padding: 4, marginBottom: 28 },
+  toggleButton: { flex: 1, paddingVertical: 11, alignItems: 'center', borderRadius: 10 },
+  activeToggle: { backgroundColor: '#16a34a' },
+  toggleText: { fontSize: 15, fontWeight: '600', color: '#6b7280' },
+  activeText: { color: '#fff' },
+  formContainer: { marginBottom: 20 },
+  input: { borderWidth: 1, borderColor: '#e5e7eb', padding: 15, borderRadius: 12, marginBottom: 14, fontSize: 16, backgroundColor: '#fafafa' },
+  button: { backgroundColor: '#16a34a', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 6 },
+  buttonDisabled: { opacity: 0.7 },
+  buttonText: { color: '#fff', fontWeight: '700', fontSize: 17 },
+  linkText: { textAlign: 'center', color: '#6b7280', fontSize: 15, marginTop: 20 },
+  registerContainer: { marginTop: 20 },
+  registerLink: { fontWeight: '700', color: '#16a34a' },
+  langPicker: {
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  langBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#fff',
+  },
+  langBtnActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  langBtnText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  langBtnTextActive: {
+    color: '#fff',
+  },
+});
 
 export default function LoginScreen({ navigation }) {
   const [mode, setMode] = useState('email');
@@ -38,20 +242,34 @@ export default function LoginScreen({ navigation }) {
         return; 
       }
 
+      // Determine next screen based on role and profile completion
+      let nextScreen, nextScreenParams;
       if (userData.role === 'doctor') {
         if (!userData.profileCompleted) {
-          navigation.replace('EditProfile', { isNewDoctor: true });
+          nextScreen = 'EditProfile';
+          nextScreenParams = { isNewDoctor: true };
         } else {
-          navigation.replace('DoctorDashboard');
+          nextScreen = 'DoctorDashboard';
         }
       } else {
-        // ✅ PATIENT FLOW
         if (!userData.patientProfileCompleted) {
-          navigation.replace('PatientOnboarding'); // ← Check onboarding
+          nextScreen = 'PatientOnboarding';
         } else {
-          navigation.replace('PatientMap');
+          nextScreen = 'PatientMap';
         }
       }
+
+      // Redirect to Terms Acceptance if not yet accepted
+      if (!userData.termsAccepted) {
+        navigation.replace('TermsAcceptance', {
+          uid: userCredential.user.uid,
+          nextScreen,
+          nextScreenParams,
+        });
+        return;
+      }
+
+      navigation.replace(nextScreen, nextScreenParams || {});
     } catch (error) {
       Alert.alert('Login Failed', error.message);
     } finally {
