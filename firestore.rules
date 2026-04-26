@@ -81,7 +81,7 @@ service cloud.firestore {
           .hasOnly(['date', 'time', 'note', 'rescheduledAt']);
 
       // Patient cancels their own appointment.
-      // AppointmentService.cancelAppointment also writes cancelledBy / cancelledAt;
+      // AppointmentService.cancelAppointment also writes cancelledBy / cancelledAt / cancellationReason;
       // those extra keys are allowed here so the service call succeeds.
       allow update: if isAuth() &&
         resource.data.patientId == request.auth.uid &&
@@ -123,10 +123,44 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['overall', 'comment', 'waitTime', 'attitude', 'cleanliness']);
 
+      // Doctor can add a reply to a rating on their own profile.
+      allow update: if isAuth() &&
+        resource.data.doctorId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['doctorReply', 'repliedAt']);
+
       // Patient can delete their own rating.
       allow delete: if isAuth() && resource.data.patientId == request.auth.uid;
 
-      // Admin full access.
+      // Admin full access (moderation: hide/unhide).
+      allow read, write, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 📋 REPORTS / DISPUTES
+    // ==========================================
+    match /reports/{reportId} {
+      // Any authenticated user can submit a report.
+      allow create: if isAuth() &&
+        request.resource.data.reportedBy == request.auth.uid;
+
+      // User can read their own reports.
+      allow read: if isAuth() && resource.data.reportedBy == request.auth.uid;
+
+      // Admin full access (view, resolve, delete).
+      allow read, write, delete: if isAdmin();
+    }
+
+    // ==========================================
+    // 💳 SUBSCRIPTION RENEWAL REQUESTS
+    // ==========================================
+    match /subscription_requests/{requestId} {
+      // Doctor can create and read their own renewal request.
+      allow create: if isAuth() &&
+        request.resource.data.doctorId == request.auth.uid;
+      allow read: if isAuth() && resource.data.doctorId == request.auth.uid;
+
+      // Admin full access (approve, activate).
       allow read, write, delete: if isAdmin();
     }
 
