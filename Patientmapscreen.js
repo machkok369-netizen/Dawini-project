@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, FlatList, StyleSheet, TouchableOpacity, TextInput,
   ScrollView, Modal, Image, Alert, ActivityIndicator
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import {
   collection, query, where, getDocs, addDoc,
@@ -96,7 +95,7 @@ export default function PatientMapScreen({ navigation, route }) {
   const [suggestionText, setSuggestionText] = useState('');
   const [suggestionLoading, setSuggestionLoading] = useState(false);
 
-  const mapRef = useRef(null);
+
 
   // ── Get location & fetch doctors ─────────────────────────────────────────────
   useEffect(() => {
@@ -283,16 +282,10 @@ export default function PatientMapScreen({ navigation, route }) {
     return { allowed: true, appointmentId: eligible.id };
   };
 
-  // ── Handle pin tap ────────────────────────────────────────────────────────────
-  const handlePinTap = (doctor) => {
+  // ── Handle doctor card tap ────────────────────────────────────────────────────
+  const handleDoctorSelect = (doctor) => {
     setSelectedDoctor(doctor);
     setCardVisible(true);
-    mapRef.current?.animateToRegion({
-      latitude: doctor.location.latitude - 0.008,
-      longitude: doctor.location.longitude,
-      latitudeDelta: 0.04,
-      longitudeDelta: 0.04,
-    }, 400);
   };
 
   // ── Book reservation ──────────────────────────────────────────────────────────
@@ -475,41 +468,81 @@ export default function PatientMapScreen({ navigation, route }) {
     </View>
   );
 
-  const initialRegion = myLocation
-    ? { ...myLocation, latitudeDelta: 0.08, longitudeDelta: 0.08 }
-    : { latitude: 36.365, longitude: 6.61, latitudeDelta: 0.15, longitudeDelta: 0.15 };
+  // ── Render individual doctor card ─────────────────────────────────────────────
+  const renderDoctorCard = (doctor) => {
+    const statusColor = STATUS_COLORS[doctor.status] || '#9ca3af';
+    const statusLabel = doctor.status === 'in_office' ? 'In Office'
+      : doctor.status === 'brb' ? 'Be Right Back'
+      : doctor.status === 'away' ? 'Away'
+      : doctor.status === 'vacation' ? 'On Vacation'
+      : 'Offline';
+    return (
+      <TouchableOpacity style={styles.doctorCard} onPress={() => handleDoctorSelect(doctor)} activeOpacity={0.85}>
+        {doctor.photoMain ? (
+          <Image source={{ uri: doctor.photoMain }} style={styles.doctorCardPhoto} />
+        ) : (
+          <View style={[styles.doctorCardPhoto, styles.doctorCardPhotoPlaceholder]}>
+            <Text style={{ fontSize: 28 }}>🏥</Text>
+          </View>
+        )}
+        <View style={styles.doctorCardInfo}>
+          <View style={styles.doctorCardTopRow}>
+            <Text style={styles.doctorCardName} numberOfLines={1}>Dr. {doctor.fullName}</Text>
+            <Text style={styles.doctorCardRating}>⭐ {doctor.averageRating || '0.0'}</Text>
+          </View>
+          <Text style={styles.doctorCardSpecialty} numberOfLines={1}>{doctor.specialty}</Text>
+          {doctor.distanceKm != null && (
+            <Text style={styles.doctorCardDistance}>📍 {doctor.distanceKm.toFixed(2)} km away</Text>
+          )}
+          <View style={styles.doctorCardStatusRow}>
+            <View style={[styles.doctorCardStatusDot, { backgroundColor: statusColor }]} />
+            <Text style={[styles.doctorCardStatusLabel, { color: statusColor }]}>{statusLabel}</Text>
+            {doctor.visitCost ? <Text style={styles.doctorCardCost}> · {doctor.visitCost} DA</Text> : null}
+          </View>
+        </View>
+        <Text style={styles.doctorCardChevron}>›</Text>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color="#16a34a" />
-      <Text style={styles.loadingText}>Loading map...</Text>
+      <Text style={styles.loadingText}>Loading doctors...</Text>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      {/* ── Full screen map ── */}
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={initialRegion}
-        showsUserLocation
-        showsMyLocationButton={false}
-      >
-        {filteredDoctors.map(doctor => (
-          doctor.location ? (
-            <Marker
-              key={doctor.id}
-              coordinate={doctor.location}
-              onPress={() => handlePinTap(doctor)}
+      {/* ── Upcoming appointment banner ── */}
+      {upcomingAppointment && (
+        <View style={styles.apptBanner}>
+          <TouchableOpacity
+            style={styles.apptBannerMain}
+            onPress={() => navigation.navigate('AppointmentHistory')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.apptBannerIcon}>📅</Text>
+            <View style={styles.apptBannerInfo}>
+              <Text style={styles.apptBannerTitle} numberOfLines={1}>
+                Dr. {upcomingAppointment.doctorName || 'Doctor'}
+              </Text>
+              <Text style={styles.apptBannerDate}>
+                {upcomingAppointment.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                {upcomingAppointment.time ? ` · ${upcomingAppointment.time}` : ''}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          {upcomingAppointment.doctorLocation && (
+            <TouchableOpacity
+              style={styles.apptBannerNav}
+              onPress={() => handleGoNow({ location: upcomingAppointment.doctorLocation, fullName: upcomingAppointment.doctorName })}
             >
-              <View style={[styles.pin, { backgroundColor: STATUS_COLORS[doctor.status] || '#9ca3af' }]}>
-                <Text style={styles.pinText}>{doctor.specialty?.charAt(0) || 'D'}</Text>
-              </View>
-            </Marker>
-          ) : null
-        ))}
-      </MapView>
+              <Text style={styles.apptBannerNavText}>🗺️</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* ── Search bar ── */}
       <View style={styles.searchContainer}>
@@ -547,33 +580,33 @@ export default function PatientMapScreen({ navigation, route }) {
         </ScrollView>
       </View>
 
-      {/* ── Back button for doctor mode ── */}
-      {isDoctor && (
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtnText}>← Back</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* ── Results count ── */}
-      <View style={styles.countBadge}>
+      {/* ── Results count & back button ── */}
+      <View style={styles.countRow}>
+        {isDoctor && (
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.backBtnText}>← Back</Text>
+          </TouchableOpacity>
+        )}
         <Text style={styles.countText}>
-          {filteredDoctors.length} doctors within {DISCOVERY_RADIUS_KM}km
+          {filteredDoctors.length} doctor{filteredDoctors.length !== 1 ? 's' : ''} within {DISCOVERY_RADIUS_KM}km
         </Text>
       </View>
 
-      {/* ── Nearby doctors list (closest → farthest) ── */}
-      <View style={styles.nearbyListWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.nearbyListContent}>
-          {filteredDoctors.map((doctor) => (
-            <TouchableOpacity key={doctor.id} style={styles.nearbyChip} onPress={() => handlePinTap(doctor)}>
-              <Text style={styles.nearbyChipTitle} numberOfLines={1}>Dr. {doctor.fullName}</Text>
-              <Text style={styles.nearbyChipSub} numberOfLines={1}>
-                {doctor.specialty} {doctor.distanceKm != null ? `· ${doctor.distanceKm.toFixed(2)}km` : ''}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* ── Doctor list (closest → farthest) ── */}
+      <FlatList
+        data={filteredDoctors}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => renderDoctorCard(item)}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>🔍</Text>
+            <Text style={styles.emptyText}>No doctors found nearby</Text>
+            <Text style={styles.emptySubText}>Try expanding your search or changing filters</Text>
+          </View>
+        }
+      />
 
       {!isDoctor && (
         <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('PatientProfile')}>
@@ -585,36 +618,6 @@ export default function PatientMapScreen({ navigation, route }) {
         <TouchableOpacity style={styles.suggestionBtn} onPress={() => setSuggestionVisible(true)}>
           <Text style={styles.suggestionBtnText}>💡</Text>
         </TouchableOpacity>
-      )}
-
-      {/* ── Upcoming appointment banner (A) ── */}
-      {upcomingAppointment && (
-        <View style={styles.apptBanner}>
-          <TouchableOpacity
-            style={styles.apptBannerMain}
-            onPress={() => navigation.navigate('AppointmentHistory')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.apptBannerIcon}>📅</Text>
-            <View style={styles.apptBannerInfo}>
-              <Text style={styles.apptBannerTitle} numberOfLines={1}>
-                Dr. {upcomingAppointment.doctorName || 'Doctor'}
-              </Text>
-              <Text style={styles.apptBannerDate}>
-                {upcomingAppointment.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                {upcomingAppointment.time ? ` · ${upcomingAppointment.time}` : ''}
-              </Text>
-            </View>
-          </TouchableOpacity>
-          {upcomingAppointment.doctorLocation && (
-            <TouchableOpacity
-              style={styles.apptBannerNav}
-              onPress={() => handleGoNow({ location: upcomingAppointment.doctorLocation, fullName: upcomingAppointment.doctorName })}
-            >
-              <Text style={styles.apptBannerNavText}>🗺️</Text>
-            </TouchableOpacity>
-          )}
-        </View>
       )}
 
       {/* ── Doctor card bottom sheet ── */}
@@ -950,37 +953,55 @@ export default function PatientMapScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  map: { ...StyleSheet.absoluteFillObject },
+  container: { flex: 1, backgroundColor: '#f8f9fa', paddingTop: 50 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
   loadingText: { marginTop: 12, color: '#6b7280', fontSize: 14 },
 
   // Search
-  searchContainer: { position: 'absolute', top: 56, left: 16, right: 16 },
+  searchContainer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 10 },
   searchIcon: { fontSize: 16, marginRight: 8 },
   searchInput: { flex: 1, fontSize: 15, color: '#111827' },
   searchClear: { fontSize: 14, color: '#9ca3af', paddingLeft: 8 },
 
   // Filters
-  filterWrapper: { position: 'absolute', top: 118, left: 0, right: 0 },
+  filterWrapper: { marginBottom: 4 },
   filterBar: { paddingHorizontal: 16, gap: 8 },
   filterChip: { backgroundColor: '#fff', borderRadius: 20, paddingVertical: 7, paddingHorizontal: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
   filterChipActive: { backgroundColor: '#16a34a' },
   filterChipText: { fontSize: 13, color: '#374151', fontWeight: '500' },
   filterChipTextActive: { color: '#fff', fontWeight: '700' },
 
-  // Count badge
-  countBadge: { position: 'absolute', bottom: 32, left: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 14 },
-  countText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  nearbyListWrap: { position: 'absolute', bottom: 150, left: 0, right: 0 },
-  nearbyListContent: { paddingHorizontal: 12, gap: 8 },
-  nearbyChip: { width: 180, backgroundColor: '#fff', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#e2e8f0' },
-  nearbyChipTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
-  nearbyChipSub: { fontSize: 11, color: '#64748b', marginTop: 3 },
+  // Count row
+  countRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, gap: 10 },
+  countText: { fontSize: 13, fontWeight: '600', color: '#6b7280', flex: 1 },
+
+  // Doctor list
+  listContent: { paddingHorizontal: 16, paddingBottom: 100, paddingTop: 4 },
+  emptyContainer: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 20 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyText: { fontSize: 17, fontWeight: '700', color: '#374151', marginBottom: 6 },
+  emptySubText: { fontSize: 13, color: '#9ca3af', textAlign: 'center' },
+
+  // Doctor list card
+  doctorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 12, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
+  doctorCardPhoto: { width: 64, height: 64, borderRadius: 12 },
+  doctorCardPhotoPlaceholder: { backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center' },
+  doctorCardInfo: { flex: 1, marginLeft: 12 },
+  doctorCardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  doctorCardName: { fontSize: 15, fontWeight: '700', color: '#111827', flex: 1, marginRight: 6 },
+  doctorCardRating: { fontSize: 12, fontWeight: '700', color: '#b45309' },
+  doctorCardSpecialty: { fontSize: 13, color: '#6b7280', marginTop: 2 },
+  doctorCardDistance: { fontSize: 12, color: '#059669', marginTop: 2, fontWeight: '600' },
+  doctorCardStatusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  doctorCardStatusDot: { width: 7, height: 7, borderRadius: 3.5, marginRight: 5 },
+  doctorCardStatusLabel: { fontSize: 11, fontWeight: '600' },
+  doctorCardCost: { fontSize: 11, color: '#6b7280' },
+  doctorCardChevron: { fontSize: 24, color: '#d1d5db', marginLeft: 8 },
+
   profileBtn: {
     position: 'absolute',
-    top: 170,
+    bottom: 90,
     right: 16,
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -991,7 +1012,7 @@ const styles = StyleSheet.create({
   profileBtnText: { fontSize: 16 },
   suggestionBtn: {
     position: 'absolute',
-    top: 224,
+    bottom: 30,
     right: 16,
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -1001,21 +1022,12 @@ const styles = StyleSheet.create({
   },
   suggestionBtnText: { fontSize: 16 },
 
-  // Back button
-  backBtn: { 
-    position: 'absolute', 
-    top: 170,  // ✅ Moved below filters
-    left: 16, 
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    elevation: 6,
-    zIndex: 50,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+  // Back button (inline in count row)
+  backBtn: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
   backBtnText: {
     fontSize: 14,
@@ -1023,11 +1035,7 @@ const styles = StyleSheet.create({
     color: '#059669',
   },
 
-  // Pin
-  pin: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 2.5, borderColor: '#fff', elevation: 4 },
-  pinText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-
-  // Doctor card
+  // Doctor card bottom sheet
   cardOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
   cardSheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 44, maxHeight: '85%' },
   dragHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
@@ -1094,8 +1102,8 @@ const styles = StyleSheet.create({
   star: { fontSize: 28, color: '#e5e7eb' },
   starFilled: { color: '#f59e0b' },
 
-  // Appointment banner (A)
-  apptBanner: { position: 'absolute', bottom: 90, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a', borderRadius: 16, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10, overflow: 'hidden' },
+  // Appointment banner
+  apptBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a', marginHorizontal: 16, marginBottom: 4, borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, overflow: 'hidden' },
   apptBannerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
   apptBannerIcon: { fontSize: 22, marginRight: 10 },
   apptBannerInfo: { flex: 1 },
@@ -1104,14 +1112,14 @@ const styles = StyleSheet.create({
   apptBannerNav: { paddingVertical: 12, paddingHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.15)' },
   apptBannerNavText: { fontSize: 22 },
 
-  // Card experience & details (C)
+  // Card experience & details
   cardExperience: { fontSize: 12, color: '#6b7280', marginTop: 3 },
   cardDetailsBox: { backgroundColor: '#f9fafb', borderRadius: 12, padding: 12, marginBottom: 12, gap: 4 },
   cardDetailItem: { fontSize: 13, color: '#374151' },
   cardEquipmentBox: { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 12, marginBottom: 12 },
   cardEquipmentLabel: { fontSize: 11, fontWeight: '700', color: '#16a34a', marginBottom: 4, letterSpacing: 0.5 },
 
-  // Reviews section (C)
+  // Reviews section
   reviewsSection: { borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 16, marginTop: 4, marginBottom: 8 },
   reviewsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   reviewsTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
@@ -1125,7 +1133,7 @@ const styles = StyleSheet.create({
   commentDate: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
   seeAllReviews: { fontSize: 13, color: '#6b7280', textAlign: 'center', paddingVertical: 6 },
 
-  // Action sheet buttons (B + E)
+  // Action sheet buttons
   directionsBtn: { backgroundColor: '#eff6ff', borderWidth: 1.5, borderColor: '#3b82f6', padding: 14, borderRadius: 14, alignItems: 'center', marginBottom: 2 },
   directionsBtnText: { color: '#1d4ed8', fontWeight: '700', fontSize: 15 },
   onMyWayBtn: { backgroundColor: '#fff7ed', borderWidth: 1.5, borderColor: '#f97316', padding: 14, borderRadius: 14, alignItems: 'center' },
