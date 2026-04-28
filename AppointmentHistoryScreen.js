@@ -5,17 +5,22 @@ import {
 } from 'react-native';
 import { auth } from './firebaseConfig';
 import AppointmentService from './AppointmentService';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+import i18n from './i18n';
 
 const CANCEL_REASONS = [
-  'Schedule conflict',
-  'Feeling better',
-  'Found another doctor',
-  'Too far away',
-  'Financial reasons',
-  'Other',
+  { key: 'Schedule conflict', labelKey: 'cancelReasonSchedule' },
+  { key: 'Feeling better', labelKey: 'cancelReasonBetter' },
+  { key: 'Found another doctor', labelKey: 'cancelReasonOther_doctor' },
+  { key: 'Too far away', labelKey: 'cancelReasonFar' },
+  { key: 'Financial reasons', labelKey: 'cancelReasonFinancial' },
+  { key: 'Other', labelKey: 'cancelReasonOther' },
 ];
 
 export default function AppointmentHistoryScreen({ navigation }) {
+  const { t } = useTranslation('screens');
+  const { isRTL } = useLanguage();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +54,7 @@ export default function AppointmentHistoryScreen({ navigation }) {
     } catch (e) {
       console.log("Fetch error:", e);
       setFetchError(true);
-      Alert.alert('Connection Error', 'Could not load appointments. Check your internet connection and try again.');
+      Alert.alert(i18n.t('screens:appointments.couldNotLoad'), i18n.t('screens:appointments.connectionError'));
     } finally {
       setLoading(false);
     }
@@ -72,7 +77,7 @@ export default function AppointmentHistoryScreen({ navigation }) {
   const confirmCancel = async () => {
     const reason = selectedReason === 'Other' ? customReason.trim() : selectedReason;
     if (!reason) {
-      Alert.alert('Select Reason', 'Please select or enter a cancellation reason.');
+      Alert.alert(i18n.t('screens:appointments.selectReasonTitle'), i18n.t('screens:appointments.selectReasonMsg'));
       return;
     }
     setCancelling(true);
@@ -80,10 +85,10 @@ export default function AppointmentHistoryScreen({ navigation }) {
     setCancelling(false);
     setCancelVisible(false);
     if (result.success) {
-      Alert.alert('Cancelled', 'Your appointment has been cancelled.');
+      Alert.alert(i18n.t('screens:appointments.cancelledTitle'), i18n.t('screens:appointments.cancelledMsg'));
       fetchAppointments();
     } else {
-      Alert.alert('Error', result.error);
+      Alert.alert(i18n.t('common:error'), result.error);
     }
   };
 
@@ -101,16 +106,16 @@ export default function AppointmentHistoryScreen({ navigation }) {
 
   const confirmReschedule = async () => {
     if (!newDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert('Invalid Date', 'Enter date as YYYY-MM-DD (e.g. 2025-07-15)');
+      Alert.alert(i18n.t('screens:appointments.rescheduleTitle'), i18n.t('screens:appointments.invalidDateMsg'));
       return;
     }
     if (!newTime.match(/^\d{2}:\d{2}$/)) {
-      Alert.alert('Invalid Time', 'Enter time as HH:MM (e.g. 09:30)');
+      Alert.alert(i18n.t('screens:appointments.rescheduleTitle'), i18n.t('screens:appointments.invalidTimeMsg'));
       return;
     }
     const parsed = new Date(newDate);
     if (isNaN(parsed.getTime()) || parsed < new Date()) {
-      Alert.alert('Invalid Date', 'Please choose a future date.');
+      Alert.alert(i18n.t('screens:appointments.rescheduleTitle'), i18n.t('screens:appointments.pastDateMsg'));
       return;
     }
     setRescheduling(true);
@@ -120,10 +125,10 @@ export default function AppointmentHistoryScreen({ navigation }) {
     setRescheduling(false);
     setRescheduleVisible(false);
     if (result.success) {
-      Alert.alert('Rescheduled', 'Your appointment has been moved.');
+      Alert.alert(i18n.t('screens:appointments.rescheduledTitle'), i18n.t('screens:appointments.rescheduledMsg'));
       fetchAppointments();
     } else {
-      Alert.alert('Error', result.error || 'Could not reschedule.');
+      Alert.alert(i18n.t('common:error'), result.error || i18n.t('screens:appointments.couldNotReschedule'));
     }
   };
 
@@ -171,19 +176,19 @@ export default function AppointmentHistoryScreen({ navigation }) {
 
         <Text style={styles.appointmentDate}>{dateStr}</Text>
 
-        {item.note && <Text style={styles.appointmentNote}>Note: {item.note}</Text>}
+        {item.note && <Text style={styles.appointmentNote}>{t('appointments.notePrefix')}{item.note}</Text>}
 
         {item.cancellationReason && (
-          <Text style={styles.cancelReason}>Reason: {item.cancellationReason}</Text>
+          <Text style={styles.cancelReason}>{t('appointments.reasonPrefix')}{item.cancellationReason}</Text>
         )}
 
         {isUpcoming && (
           <View style={styles.appointmentActions}>
             <TouchableOpacity style={styles.actionBtn} onPress={() => openRescheduleModal(item)}>
-              <Text style={styles.actionBtnText}>📅 Reschedule</Text>
+              <Text style={styles.actionBtnText}>📅 {t('appointments.reschedule')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDanger]} onPress={() => openCancelModal(item)}>
-              <Text style={[styles.actionBtnText, styles.actionBtnDangerText]}>❌ Cancel</Text>
+              <Text style={[styles.actionBtnText, styles.actionBtnDangerText]}>❌ {t('appointments.cancel')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -203,22 +208,22 @@ export default function AppointmentHistoryScreen({ navigation }) {
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyIcon}>⚠️</Text>
-        <Text style={styles.emptyText}>Could not load appointments</Text>
+        <Text style={styles.emptyText}>{t('appointments.couldNotLoad')}</Text>
         <TouchableOpacity style={styles.searchBtn} onPress={() => { setLoading(true); fetchAppointments(); }}>
-          <Text style={styles.searchBtnText}>Try Again</Text>
+          <Text style={styles.searchBtnText}>{t('appointments.reschedule')}</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}>
       {appointments.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>📅</Text>
-          <Text style={styles.emptyText}>No appointments yet</Text>
+          <Text style={styles.emptyText}>{t('appointments.noAppointments')}</Text>
           <TouchableOpacity style={styles.searchBtn} onPress={() => navigation.navigate('PatientMap')}>
-            <Text style={styles.searchBtnText}>Search Doctors →</Text>
+            <Text style={styles.searchBtnText}>{t('appointments.searchDoctors')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -235,24 +240,24 @@ export default function AppointmentHistoryScreen({ navigation }) {
       <Modal visible={rescheduleVisible} transparent animationType="slide" onRequestClose={() => setRescheduleVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>📅 Reschedule Appointment</Text>
+            <Text style={styles.modalTitle}>📅 {t('appointments.rescheduleTitle')}</Text>
             <Text style={styles.modalSub}>Dr. {selectedAppointment?.doctorName}</Text>
 
-            <Text style={styles.fieldLabel}>New Date (YYYY-MM-DD)</Text>
+            <Text style={styles.fieldLabel}>{t('appointments.newDateLabel')}</Text>
             <TextInput
               style={styles.fieldInput}
               value={newDate}
               onChangeText={setNewDate}
-              placeholder="e.g. 2025-07-15"
+              placeholder={t('appointments.newDatePlaceholder')}
               keyboardType="numeric"
             />
 
-            <Text style={styles.fieldLabel}>New Time (HH:MM)</Text>
+            <Text style={styles.fieldLabel}>{t('appointments.newTimeLabel')}</Text>
             <TextInput
               style={styles.fieldInput}
               value={newTime}
               onChangeText={setNewTime}
-              placeholder="e.g. 09:30"
+              placeholder={t('appointments.newTimePlaceholder')}
               keyboardType="numeric"
             />
 
@@ -263,11 +268,11 @@ export default function AppointmentHistoryScreen({ navigation }) {
             >
               {rescheduling
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.modalBtnText}>Confirm Reschedule</Text>
+                : <Text style={styles.modalBtnText}>{t('appointments.confirmReschedule')}</Text>
               }
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setRescheduleVisible(false)}>
-              <Text style={styles.modalCancelText}>Back</Text>
+              <Text style={styles.modalCancelText}>{t('appointments.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -277,16 +282,16 @@ export default function AppointmentHistoryScreen({ navigation }) {
       <Modal visible={cancelVisible} transparent animationType="slide" onRequestClose={() => setCancelVisible(false)}>
         <View style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalSheet}>
-            <Text style={styles.modalTitle}>❌ Cancel Appointment</Text>
-            <Text style={styles.modalSub}>Dr. {cancelAppointment?.doctorName} — please tell us why</Text>
+            <Text style={styles.modalTitle}>❌ {t('appointments.cancelTitle')}</Text>
+            <Text style={styles.modalSub}>Dr. {cancelAppointment?.doctorName} — {t('appointments.cancelSubtitle')}</Text>
 
             {CANCEL_REASONS.map(r => (
               <TouchableOpacity
-                key={r}
-                style={[styles.reasonBtn, selectedReason === r && styles.reasonBtnSelected]}
-                onPress={() => setSelectedReason(r)}
+                key={r.key}
+                style={[styles.reasonBtn, selectedReason === r.key && styles.reasonBtnSelected]}
+                onPress={() => setSelectedReason(r.key)}
               >
-                <Text style={[styles.reasonText, selectedReason === r && styles.reasonTextSelected]}>{r}</Text>
+                <Text style={[styles.reasonText, selectedReason === r.key && styles.reasonTextSelected]}>{t('appointments.' + r.labelKey)}</Text>
               </TouchableOpacity>
             ))}
 
@@ -295,7 +300,7 @@ export default function AppointmentHistoryScreen({ navigation }) {
                 style={[styles.fieldInput, { marginTop: 8 }]}
                 value={customReason}
                 onChangeText={setCustomReason}
-                placeholder="Please describe the reason..."
+                placeholder={t('appointments.customReasonPlaceholder')}
                 multiline
               />
             )}
@@ -307,11 +312,11 @@ export default function AppointmentHistoryScreen({ navigation }) {
             >
               {cancelling
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.modalBtnText}>Confirm Cancellation</Text>
+                : <Text style={styles.modalBtnText}>{t('appointments.confirmCancellation')}</Text>
               }
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setCancelVisible(false)}>
-              <Text style={styles.modalCancelText}>Back</Text>
+              <Text style={styles.modalCancelText}>{t('appointments.cancel')}</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>

@@ -10,6 +10,9 @@ import {
   onSnapshot, runTransaction
 } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+import i18n from './i18n';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -55,6 +58,8 @@ const REVIEW_CATEGORIES = [
 
 export default function PatientMapScreen({ navigation, route }) {
   const isDoctor = route?.params?.isDoctor || false;
+  const { t } = useTranslation('screens');
+  const { isRTL } = useLanguage();
 
   const [doctors, setDoctors]           = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -102,11 +107,11 @@ export default function PatientMapScreen({ navigation, route }) {
     const requestLocationPermission = () =>
       new Promise((resolve) => {
         Alert.alert(
-          '📍 Location Access',
-          'Dawini uses your location to show nearby doctors on the map. Your location is only used while the app is open and is never stored on our servers.',
+          `📍 ${t('patientMap.locationTitle')}`,
+          t('patientMap.locationMsg'),
           [
-            { text: 'Skip', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Continue', onPress: () => resolve(true) },
+            { text: t('patientMap.locationSkip'), style: 'cancel', onPress: () => resolve(false) },
+            { text: t('patientMap.locationContinue'), onPress: () => resolve(true) },
           ],
           { onDismiss: () => resolve(false) }
         );
@@ -141,7 +146,7 @@ export default function PatientMapScreen({ navigation, route }) {
         }
       } catch (e) {
         console.log('Map init error:', e);
-        Alert.alert('Connection Error', 'Could not load doctor data. Please check your internet connection and restart the app.');
+        Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.connectionError'));
       } finally {
         setLoading(false);
       }
@@ -172,7 +177,7 @@ export default function PatientMapScreen({ navigation, route }) {
     }, (err) => {
       console.log('Appointment banner error:', err);
       setUpcomingAppointment(null);
-      Alert.alert('Connection Issue', 'Could not load your upcoming appointments. Pull to refresh when back online.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.appointmentError'));
     });
     return () => unsub();
   }, []);
@@ -292,22 +297,22 @@ export default function PatientMapScreen({ navigation, route }) {
   const handleBook = async () => {
     const parsedRelativeAge = bookingRelativeAge.trim() ? parseInt(bookingRelativeAge, 10) : null;
     if (!bookingTime.trim()) {
-      Alert.alert('Missing', 'Please enter a preferred time.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.missingTime'));
       return;
     }
     if (bookForRelative && !bookingRelativeName.trim()) {
-      Alert.alert('Missing', 'Please enter relative name for this booking.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.missingRelativeName'));
       return;
     }
     if (bookForRelative && bookingRelativeAge.trim() && Number.isNaN(parsedRelativeAge)) {
-      Alert.alert('Invalid Relative Age', 'Please enter a valid relative age or leave it empty.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.invalidRelAge'));
       return;
     }
     setBookingLoading(true);
     try {
       const uid = auth.currentUser?.uid;
       if (!uid) {
-        Alert.alert('Error', 'You must be logged in to book.');
+        Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.notLoggedIn'));
         return;
       }
       const userSnap = await getDoc(doc(db, 'users', uid));
@@ -356,24 +361,24 @@ export default function PatientMapScreen({ navigation, route }) {
 
       if (noSlotsAvailable) {
         Alert.alert(
-          'No Slots Available',
-          'This doctor has no available slots for today. Please try again tomorrow or choose another doctor.'
+          i18n.t('common:error'),
+          i18n.t('screens:patientMap.noSlotsMsg')
         );
         return;
       }
 
       Alert.alert(
-        '✅ Booked!',
+        '✅',
         acceptMode === 'auto'
-          ? 'Your reservation is confirmed!'
-          : 'Your request was sent. Waiting for doctor confirmation.'
+          ? i18n.t('screens:patientMap.bookedConfirmed')
+          : i18n.t('screens:patientMap.bookedPending')
       );
       setBookingVisible(false);
       setBookingTime('');
       setBookingNote('');
       setBookForRelative(false);
     } catch (e) {
-      Alert.alert('Error', 'Could not complete booking. Try again.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.bookError'));
     } finally {
       setBookingLoading(false);
     }
@@ -387,7 +392,7 @@ export default function PatientMapScreen({ navigation, route }) {
       return;
     }
     if (ratingStars === 0) {
-      Alert.alert('Missing', 'Please give at least an overall star rating.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.missingRating'));
       return;
     }
     try {
@@ -403,18 +408,18 @@ export default function PatientMapScreen({ navigation, route }) {
         isPublicComment: true,
         createdAt: serverTimestamp(),
       });
-      Alert.alert('Thank you!', 'Your review has been submitted.');
+      Alert.alert('🙏', i18n.t('screens:patientMap.reviewThanks'));
       setRatingVisible(false);
       setRatingStars(0); setRatingWait(0); setRatingAttitude(0);
       setRatingCleanliness(0); setRatingComment('');
     } catch (e) {
-      Alert.alert('Error', 'Could not submit rating.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.reviewError'));
     }
   };
 
   const handleGoNow = (doctor) => {
     if (!doctor?.location) {
-      Alert.alert('Location unavailable', 'This doctor has no location set.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.noLocation'));
       return;
     }
     navigation.navigate('Tracking', { doctor });
@@ -432,7 +437,7 @@ export default function PatientMapScreen({ navigation, route }) {
 
   const submitSuggestion = async () => {
     if (!suggestionText.trim()) {
-      Alert.alert('Missing', 'Please write your suggestion first.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.missingSuggestion'));
       return;
     }
     setSuggestionLoading(true);
@@ -444,11 +449,11 @@ export default function PatientMapScreen({ navigation, route }) {
         status: 'new',
         createdAt: serverTimestamp(),
       });
-      Alert.alert('Thank you!', 'Your suggestion has been recorded.');
+      Alert.alert('🙏', i18n.t('screens:patientMap.suggestionThanks'));
       setSuggestionText('');
       setSuggestionVisible(false);
     } catch (e) {
-      Alert.alert('Error', 'Could not save suggestion.');
+      Alert.alert(i18n.t('common:error'), i18n.t('screens:patientMap.suggestionError'));
     } finally {
       setSuggestionLoading(false);
     }
@@ -471,11 +476,11 @@ export default function PatientMapScreen({ navigation, route }) {
   // ── Render individual doctor card ─────────────────────────────────────────────
   const renderDoctorCard = (doctor) => {
     const statusColor = STATUS_COLORS[doctor.status] || '#9ca3af';
-    const statusLabel = doctor.status === 'in_office' ? 'In Office'
-      : doctor.status === 'brb' ? 'Be Right Back'
-      : doctor.status === 'away' ? 'Away'
-      : doctor.status === 'vacation' ? 'On Vacation'
-      : 'Offline';
+    const statusLabel = doctor.status === 'in_office' ? t('patientMap.statusInOffice')
+      : doctor.status === 'brb' ? t('patientMap.statusBeRightBack')
+      : doctor.status === 'away' ? t('patientMap.statusAway')
+      : doctor.status === 'vacation' ? t('patientMap.statusOnVacation')
+      : t('patientMap.statusOffline');
     return (
       <TouchableOpacity style={styles.doctorCard} onPress={() => handleDoctorSelect(doctor)} activeOpacity={0.85}>
         {doctor.photoMain ? (
@@ -492,7 +497,7 @@ export default function PatientMapScreen({ navigation, route }) {
           </View>
           <Text style={styles.doctorCardSpecialty} numberOfLines={1}>{doctor.specialty}</Text>
           {doctor.distanceKm != null && (
-            <Text style={styles.doctorCardDistance}>📍 {doctor.distanceKm.toFixed(2)} km away</Text>
+            <Text style={styles.doctorCardDistance}>📍 {doctor.distanceKm.toFixed(2)} {t('patientMap.kmAway')}</Text>
           )}
           <View style={styles.doctorCardStatusRow}>
             <View style={[styles.doctorCardStatusDot, { backgroundColor: statusColor }]} />
@@ -506,14 +511,14 @@ export default function PatientMapScreen({ navigation, route }) {
   };
 
   if (loading) return (
-    <View style={styles.loadingContainer}>
+    <View style={[styles.loadingContainer, { direction: isRTL ? 'rtl' : 'ltr' }]}>
       <ActivityIndicator size="large" color="#16a34a" />
-      <Text style={styles.loadingText}>Loading doctors...</Text>
+      <Text style={styles.loadingText}>{t('patientMap.loading')}</Text>
     </View>
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}>
       {/* ── Upcoming appointment banner ── */}
       {upcomingAppointment && (
         <View style={styles.apptBanner}>
@@ -550,7 +555,7 @@ export default function PatientMapScreen({ navigation, route }) {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search doctor, specialty, clinic..."
+            placeholder={t('patientMap.searchPlaceholder')}
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor="#9ca3af"
@@ -584,11 +589,11 @@ export default function PatientMapScreen({ navigation, route }) {
       <View style={styles.countRow}>
         {isDoctor && (
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.backBtnText}>← Back</Text>
+            <Text style={styles.backBtnText}>← {t('patientMap.backToList')}</Text>
           </TouchableOpacity>
         )}
         <Text style={styles.countText}>
-          {filteredDoctors.length} doctor{filteredDoctors.length !== 1 ? 's' : ''} within {DISCOVERY_RADIUS_KM}km
+          {t('patientMap.doctorsNearby', { n: filteredDoctors.length, km: DISCOVERY_RADIUS_KM })}
         </Text>
       </View>
 
@@ -602,8 +607,8 @@ export default function PatientMapScreen({ navigation, route }) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>🔍</Text>
-            <Text style={styles.emptyText}>No doctors found nearby</Text>
-            <Text style={styles.emptySubText}>Try expanding your search or changing filters</Text>
+            <Text style={styles.emptyText}>{t('patientMap.noDoctors')}</Text>
+            <Text style={styles.emptySubText}>{t('patientMap.noDoctorsHint')}</Text>
           </View>
         }
       />
@@ -651,7 +656,7 @@ export default function PatientMapScreen({ navigation, route }) {
                     <Text style={styles.cardSpecialty}>{selectedDoctor.specialty}</Text>
                     <Text style={styles.cardCabinet}>{selectedDoctor.cabinetName}</Text>
                     {selectedDoctor.distanceKm != null ? (
-                      <Text style={styles.cardDistance}>📍 {selectedDoctor.distanceKm.toFixed(2)} km away</Text>
+                      <Text style={styles.cardDistance}>📍 {selectedDoctor.distanceKm.toFixed(2)} {t('patientMap.kmAway')}</Text>
                     ) : null}
                     {selectedDoctor.experience ? (
                       <Text style={styles.cardExperience}>🎓 {selectedDoctor.experience} yrs experience</Text>
@@ -659,11 +664,11 @@ export default function PatientMapScreen({ navigation, route }) {
                     <View style={styles.cardStatusRow}>
                       <View style={[styles.cardStatusDot, { backgroundColor: STATUS_COLORS[selectedDoctor.status] || '#9ca3af' }]} />
                       <Text style={[styles.cardStatusText, { color: STATUS_COLORS[selectedDoctor.status] || '#9ca3af' }]}>
-                        {selectedDoctor.status === 'in_office' ? 'In Office'
-                          : selectedDoctor.status === 'brb' ? 'Be Right Back'
-                          : selectedDoctor.status === 'away' ? 'Away'
-                          : selectedDoctor.status === 'vacation' ? 'On Vacation'
-                          : 'Offline'}
+                        {selectedDoctor.status === 'in_office' ? t('patientMap.statusInOffice')
+                          : selectedDoctor.status === 'brb' ? t('patientMap.statusBeRightBack')
+                          : selectedDoctor.status === 'away' ? t('patientMap.statusAway')
+                          : selectedDoctor.status === 'vacation' ? t('patientMap.statusOnVacation')
+                          : t('patientMap.statusOffline')}
                       </Text>
                     </View>
                   </View>
@@ -673,21 +678,21 @@ export default function PatientMapScreen({ navigation, route }) {
                 <View style={styles.cardStats}>
                   <View style={styles.cardStat}>
                     <Text style={styles.cardStatValue}>{selectedDoctor.visitCost ? `${selectedDoctor.visitCost} DA` : '—'}</Text>
-                    <Text style={styles.cardStatLabel}>Visit Cost</Text>
+                    <Text style={styles.cardStatLabel}>{t('patientMap.visitCost')}</Text>
                   </View>
                   <View style={styles.cardStatDivider} />
                   <View style={styles.cardStat}>
                     <Text style={styles.cardStatValue}>
                       {todaySlot ? `${todaySlot.available}/${todaySlot.max}` : '—'}
                     </Text>
-                    <Text style={styles.cardStatLabel}>Slots Today</Text>
+                    <Text style={styles.cardStatLabel}>{t('patientMap.slotsToday')}</Text>
                   </View>
                   <View style={styles.cardStatDivider} />
                   <View style={styles.cardStat}>
                     <Text style={styles.cardStatValue}>
                       {selectedDoctor.averageRating ? `${selectedDoctor.averageRating}★` : '—'}
                     </Text>
-                    <Text style={styles.cardStatLabel}>Rating</Text>
+                    <Text style={styles.cardStatLabel}>{t('patientMap.rating')}</Text>
                   </View>
                 </View>
 
@@ -706,7 +711,7 @@ export default function PatientMapScreen({ navigation, route }) {
                 {/* Equipment */}
                 {selectedDoctor.equipment ? (
                   <View style={styles.cardEquipmentBox}>
-                    <Text style={styles.cardEquipmentLabel}>🩺 Equipment & Services</Text>
+                    <Text style={styles.cardEquipmentLabel}>🩺 {t('patientMap.equipmentServices')}</Text>
                     <Text style={styles.cardEquipment}>{selectedDoctor.equipment}</Text>
                   </View>
                 ) : null}
@@ -717,13 +722,13 @@ export default function PatientMapScreen({ navigation, route }) {
                     {selectedDoctor.photoEntrance && (
                       <View style={styles.cardPhotoThumbWrap}>
                         <Image source={{ uri: selectedDoctor.photoEntrance }} style={styles.cardPhotoThumb} />
-                        <Text style={styles.cardPhotoThumbLabel}>Entrance</Text>
+                        <Text style={styles.cardPhotoThumbLabel}>{t('patientMap.entrancePhoto')}</Text>
                       </View>
                     )}
                     {selectedDoctor.photoStreet && (
                       <View style={styles.cardPhotoThumbWrap}>
                         <Image source={{ uri: selectedDoctor.photoStreet }} style={styles.cardPhotoThumb} />
-                        <Text style={styles.cardPhotoThumbLabel}>Street View</Text>
+                        <Text style={styles.cardPhotoThumbLabel}>{t('patientMap.streetViewPhoto')}</Text>
                       </View>
                     )}
                   </ScrollView>
@@ -736,13 +741,18 @@ export default function PatientMapScreen({ navigation, route }) {
                   return (
                     <View style={styles.reviewsSection}>
                       <View style={styles.reviewsHeader}>
-                        <Text style={styles.reviewsTitle}>Patient Reviews</Text>
-                        <Text style={styles.reviewsCount}>⭐ {avg('overall')} · {doctorRatings.length} reviews</Text>
+                        <Text style={styles.reviewsTitle}>{t('patientMap.patientReviews')}</Text>
+                        <Text style={styles.reviewsCount}>⭐ {avg('overall')} · {doctorRatings.length} {t('patientMap.reviews')}</Text>
                       </View>
                       <View style={styles.reviewsBars}>
-                        {REVIEW_CATEGORIES.map(({ label, field }) => (
+                        {REVIEW_CATEGORIES.map(({ field }) => (
                           <View key={field} style={styles.reviewBarItem}>
-                            <Text style={styles.reviewBarLabel}>{label}</Text>
+                            <Text style={styles.reviewBarLabel}>
+                              {field === 'overall' ? t('patientMap.catOverall')
+                                : field === 'waitTime' ? t('patientMap.catWait')
+                                : field === 'attitude' ? t('patientMap.catAttitude')
+                                : t('patientMap.catCleanliness')}
+                            </Text>
                             <Text style={styles.reviewBarVal}>{avg(field)}★</Text>
                           </View>
                         ))}
@@ -754,7 +764,7 @@ export default function PatientMapScreen({ navigation, route }) {
                         </View>
                       ))}
                       {comments.length > 3 && (
-                        <Text style={styles.seeAllReviews}>+ {comments.length - 3} more reviews</Text>
+                        <Text style={styles.seeAllReviews}>{t('patientMap.moreReviews', { n: comments.length - 3 })}</Text>
                       )}
                     </View>
                   );
@@ -768,7 +778,7 @@ export default function PatientMapScreen({ navigation, route }) {
                       style={styles.directionsBtn}
                       onPress={() => handleGoNow(selectedDoctor)}
                     >
-                      <Text style={styles.directionsBtnText}>🗺️ Go Now</Text>
+                      <Text style={styles.directionsBtnText}>🗺️ {t('patientMap.goNow')}</Text>
                     </TouchableOpacity>
 
                     {/* Book appointment button */}
@@ -777,12 +787,12 @@ export default function PatientMapScreen({ navigation, route }) {
                         style={styles.bookBtn}
                         onPress={() => { setCardVisible(false); setBookingVisible(true); }}
                       >
-                        <Text style={styles.bookBtnText}>📅 Make Appointment</Text>
+                        <Text style={styles.bookBtnText}>📅 {t('patientMap.makeAppointment')}</Text>
                       </TouchableOpacity>
                     ) : (
                       <View style={styles.bookBtnDisabled}>
                         <Text style={styles.bookBtnDisabledText}>
-                          {selectedDoctor.status !== 'in_office' ? '⚠️ Doctor not available right now' : '⚠️ No slots available today'}
+                          {selectedDoctor.status !== 'in_office' ? `⚠️ ${t('patientMap.doctorUnavailable')}` : `⚠️ ${t('patientMap.noSlotsAvailable')}`}
                         </Text>
                       </View>
                     )}
@@ -792,7 +802,7 @@ export default function PatientMapScreen({ navigation, route }) {
                       style={styles.rateBtn}
                       onPress={openRatingModal}
                     >
-                      <Text style={styles.rateBtnText}>⭐ Rate & Review</Text>
+                      <Text style={styles.rateBtnText}>⭐ {t('patientMap.rateReview')}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -807,25 +817,25 @@ export default function PatientMapScreen({ navigation, route }) {
       <Modal visible={bookingVisible} transparent animationType="slide" onRequestClose={() => setBookingVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Book Appointment</Text>
+            <Text style={styles.modalTitle}>{t('patientMap.bookAppointmentTitle')}</Text>
             <Text style={styles.modalSub}>Dr. {selectedDoctor?.fullName} · {selectedDoctor?.cabinetName}</Text>
 
             <View style={styles.bookingProfileBox}>
-              <Text style={styles.bookingProfileTitle}>Booking Profile</Text>
-              <Text style={styles.bookingProfileText}>Name: {patientProfile?.fullName || '—'}</Text>
-              <Text style={styles.bookingProfileText}>Age: {patientProfile?.age || '—'}</Text>
+              <Text style={styles.bookingProfileTitle}>{t('patientMap.bookingProfile')}</Text>
+              <Text style={styles.bookingProfileText}>{t('patientMap.nameLabel')} {patientProfile?.fullName || '—'}</Text>
+              <Text style={styles.bookingProfileText}>{t('patientMap.ageLabel')} {patientProfile?.age || '—'}</Text>
               <View style={styles.bookingForSwitchRow}>
                 <TouchableOpacity
                   style={[styles.bookingForBtn, !bookForRelative && styles.bookingForBtnActive]}
                   onPress={() => setBookForRelative(false)}
                 >
-                  <Text style={[styles.bookingForBtnText, !bookForRelative && styles.bookingForBtnTextActive]}>For Me</Text>
+                  <Text style={[styles.bookingForBtnText, !bookForRelative && styles.bookingForBtnTextActive]}>{t('patientMap.forMe')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.bookingForBtn, bookForRelative && styles.bookingForBtnActive]}
                   onPress={() => setBookForRelative(true)}
                 >
-                  <Text style={[styles.bookingForBtnText, bookForRelative && styles.bookingForBtnTextActive]}>For Relative</Text>
+                  <Text style={[styles.bookingForBtnText, bookForRelative && styles.bookingForBtnTextActive]}>{t('patientMap.forRelative')}</Text>
                 </TouchableOpacity>
               </View>
               {bookForRelative && (
@@ -853,18 +863,18 @@ export default function PatientMapScreen({ navigation, route }) {
               )}
             </View>
 
-            <Text style={styles.modalLabel}>Preferred Time</Text>
+            <Text style={styles.modalLabel}>{t('patientMap.preferredTime')}</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="e.g. 10:30 AM"
+              placeholder={t('patientMap.timePlaceholder')}
               value={bookingTime}
               onChangeText={setBookingTime}
             />
 
-            <Text style={styles.modalLabel}>Note (optional)</Text>
+            <Text style={styles.modalLabel}>{t('patientMap.noteOptional')}</Text>
             <TextInput
               style={[styles.modalInput, { height: 80 }]}
-              placeholder="Describe your issue briefly..."
+              placeholder={t('patientMap.notePlaceholder')}
               value={bookingNote}
               onChangeText={setBookingNote}
               multiline
@@ -872,22 +882,22 @@ export default function PatientMapScreen({ navigation, route }) {
 
             {selectedDoctor?.acceptMode === 'auto' ? (
               <View style={styles.autoAcceptBadge}>
-                <Text style={styles.autoAcceptText}>⚡ This doctor auto-confirms bookings</Text>
+                <Text style={styles.autoAcceptText}>⚡ {t('patientMap.autoConfirm')}</Text>
               </View>
             ) : (
               <View style={styles.manualBadge}>
-                <Text style={styles.manualText}>✋ Booking needs doctor approval</Text>
+                <Text style={styles.manualText}>✋ {t('patientMap.needsApproval')}</Text>
               </View>
             )}
 
             <TouchableOpacity style={styles.modalBtn} onPress={handleBook} disabled={bookingLoading}>
               {bookingLoading
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.modalBtnText}>Confirm Booking</Text>
+                : <Text style={styles.modalBtnText}>{t('patientMap.confirmBooking')}</Text>
               }
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setBookingVisible(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{i18n.t('common:cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -898,28 +908,28 @@ export default function PatientMapScreen({ navigation, route }) {
         <View style={styles.modalOverlay}>
           <ScrollView>
             <View style={styles.modalSheet}>
-              <Text style={styles.modalTitle}>Rate Your Visit</Text>
+              <Text style={styles.modalTitle}>{t('patientMap.rateTitle')}</Text>
               <Text style={styles.modalSub}>Dr. {selectedDoctor?.fullName}</Text>
 
-              <StarPicker value={ratingStars} onChange={setRatingStars} label="Overall Experience" />
-              <StarPicker value={ratingWait} onChange={setRatingWait} label="Wait Time" />
-              <StarPicker value={ratingAttitude} onChange={setRatingAttitude} label="Doctor Attitude" />
-              <StarPicker value={ratingCleanliness} onChange={setRatingCleanliness} label="Clinic Cleanliness" />
+              <StarPicker value={ratingStars} onChange={setRatingStars} label={t('patientMap.rateOverall')} />
+              <StarPicker value={ratingWait} onChange={setRatingWait} label={t('patientMap.rateWait')} />
+              <StarPicker value={ratingAttitude} onChange={setRatingAttitude} label={t('patientMap.rateAttitude')} />
+              <StarPicker value={ratingCleanliness} onChange={setRatingCleanliness} label={t('patientMap.rateCleanliness')} />
 
-              <Text style={styles.modalLabel}>Comment (optional)</Text>
+              <Text style={styles.modalLabel}>{t('patientMap.rateCommentLabel')}</Text>
               <TextInput
                 style={[styles.modalInput, { height: 100 }]}
-                placeholder="Share your experience..."
+                placeholder={t('patientMap.rateCommentPlaceholder')}
                 value={ratingComment}
                 onChangeText={setRatingComment}
                 multiline
               />
 
               <TouchableOpacity style={styles.modalBtn} onPress={handleRating}>
-                <Text style={styles.modalBtnText}>Submit Review</Text>
+                <Text style={styles.modalBtnText}>{t('patientMap.submitReview')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setRatingVisible(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{i18n.t('common:cancel')}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -930,20 +940,20 @@ export default function PatientMapScreen({ navigation, route }) {
       <Modal visible={suggestionVisible} transparent animationType="slide" onRequestClose={() => setSuggestionVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Suggestion Box</Text>
-            <Text style={styles.modalSub}>Help us improve Dawini</Text>
+            <Text style={styles.modalTitle}>{t('patientMap.suggestionTitle')}</Text>
+            <Text style={styles.modalSub}>{t('patientMap.suggestionSubtitle')}</Text>
             <TextInput
               style={[styles.modalInput, { height: 110 }]}
               multiline
-              placeholder="Write your suggestion..."
+              placeholder={t('patientMap.suggestionPlaceholder')}
               value={suggestionText}
               onChangeText={setSuggestionText}
             />
             <TouchableOpacity style={styles.modalBtn} onPress={submitSuggestion} disabled={suggestionLoading}>
-              {suggestionLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalBtnText}>Send Suggestion</Text>}
+              {suggestionLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalBtnText}>{t('patientMap.sendSuggestion')}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setSuggestionVisible(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{i18n.t('common:cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>

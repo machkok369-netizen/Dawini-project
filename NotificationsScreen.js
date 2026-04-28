@@ -6,8 +6,12 @@ import {
 import { onSnapshot, query, collection, where, orderBy } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 import NotificationService from './NotificationService';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
 
 export default function NotificationsScreen({ navigation }) {
+  const { t } = useTranslation('screens');
+  const { isRTL } = useLanguage();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,12 +110,12 @@ export default function NotificationsScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}>
       {notifications.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>🔔</Text>
-          <Text style={styles.emptyText}>No notifications yet</Text>
-          <Text style={styles.emptySubtext}>You'll get updates about your appointments here</Text>
+          <Text style={styles.emptyText}>{t('notifications.noNotifications')}</Text>
+          <Text style={styles.emptySubtext}>{t('notifications.noNotificationsSubtext')}</Text>
         </View>
       ) : (
         <FlatList

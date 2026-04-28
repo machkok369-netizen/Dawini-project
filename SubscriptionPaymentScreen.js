@@ -5,6 +5,9 @@ import {
 } from 'react-native';
 import { doc, getDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+import i18n from './i18n';
 
 const SUBSCRIPTION_PLANS = [
   { id: '1week',  label: '1 Week',  price: 1500, weeks: 1, months: null },
@@ -12,6 +15,8 @@ const SUBSCRIPTION_PLANS = [
 ];
 
 export default function SubscriptionPaymentScreen({ navigation }) {
+  const { t } = useTranslation('screens');
+  const { isRTL } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -59,21 +64,21 @@ export default function SubscriptionPaymentScreen({ navigation }) {
 
   const submitRenewalRequest = async () => {
     if (!selectedPlan) {
-      Alert.alert('Select Plan', 'Please choose a subscription plan.');
+      Alert.alert(i18n.t('screens:subscription.selectPlanTitle'), i18n.t('screens:subscription.selectPlanMsg'));
       return;
     }
     if (!transactionRef.trim()) {
-      Alert.alert('Missing Reference', 'Please enter the El Dahabya transaction reference number.');
+      Alert.alert(i18n.t('screens:subscription.missingRefTitle'), i18n.t('screens:subscription.missingRefMsg'));
       return;
     }
 
     Alert.alert(
-      'Confirm Renewal Request',
-      `Plan: ${selectedPlan.label}\nPrice: ${selectedPlan.price} DA\nTransaction Ref: ${transactionRef.trim()}\n\nThe admin will verify and activate your subscription.`,
+      i18n.t('screens:subscription.confirmRenewalTitle'),
+      `${i18n.t('screens:subscription.planLabel')}: ${selectedPlan.label}\nPrice: ${selectedPlan.price} DA\n${i18n.t('screens:subscription.transactionRef')}: ${transactionRef.trim()}\n\n${i18n.t('screens:subscription.pendingMsg')}`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: i18n.t('common:cancel'), style: 'cancel' },
         {
-          text: 'Submit',
+          text: i18n.t('screens:subscription.submitBtn'),
           onPress: async () => {
             setSubmitting(true);
             try {
@@ -104,12 +109,12 @@ export default function SubscriptionPaymentScreen({ navigation }) {
               });
 
               Alert.alert(
-                '✅ Request Submitted',
-                'Your renewal request has been sent to the admin. Your subscription will be activated once payment is verified.',
-                [{ text: 'OK', onPress: () => navigation.goBack() }]
+                i18n.t('screens:subscription.submittedTitle'),
+                i18n.t('screens:subscription.submittedMsg'),
+                [{ text: i18n.t('common:ok'), onPress: () => navigation.goBack() }]
               );
             } catch (e) {
-              Alert.alert('Error', 'Could not submit request: ' + e.message);
+              Alert.alert(i18n.t('common:error'), i18n.t('screens:subscription.submitErrorMsg') + e.message);
             } finally {
               setSubmitting(false);
             }
@@ -133,28 +138,28 @@ export default function SubscriptionPaymentScreen({ navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]} contentContainerStyle={styles.content}>
 
       {/* Subscription status */}
       <View style={[styles.statusCard, isExpired ? styles.statusCardExpired : styles.statusCardActive]}>
         <Text style={styles.statusIcon}>{isExpired ? '⚠️' : '✅'}</Text>
         <View style={{ flex: 1 }}>
           <Text style={styles.statusTitle}>
-            {isExpired ? 'Subscription Expired' : 'Active Subscription'}
+            {isExpired ? t('subscription.expired') : t('subscription.active')}
           </Text>
           {subscriptionEnd && !isExpired && (
             <Text style={styles.statusSub}>
-              Expires {subscriptionEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-              {' · '}{daysLeft} days left
+              {t('subscription.expires')} {subscriptionEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+              {' · '}{t('subscription.daysLeft', { n: daysLeft })}
             </Text>
           )}
           {isExpired && subscriptionEnd && (
             <Text style={styles.statusSub}>
-              Expired {subscriptionEnd.toLocaleDateString('en-GB')}
+              {t('subscription.expired_on')} {subscriptionEnd.toLocaleDateString('en-GB')}
             </Text>
           )}
           {!subscriptionEnd && (
-            <Text style={styles.statusSub}>No active subscription</Text>
+            <Text style={styles.statusSub}>{t('subscription.noSubscription')}</Text>
           )}
         </View>
       </View>
@@ -162,15 +167,15 @@ export default function SubscriptionPaymentScreen({ navigation }) {
       {/* Pending request notice */}
       {pendingRequest && (
         <View style={styles.pendingCard}>
-          <Text style={styles.pendingTitle}>⏳ Pending Renewal Request</Text>
+          <Text style={styles.pendingTitle}>⏳ {t('subscription.pendingTitle')}</Text>
           <Text style={styles.pendingSub}>
-            Plan: {pendingRequest.planLabel} · {pendingRequest.price} DA
+            {t('subscription.planLabel')}: {pendingRequest.planLabel} · {pendingRequest.price} DA
           </Text>
           <Text style={styles.pendingSub}>
-            Ref: {pendingRequest.transactionRef}
+            {t('subscription.refLabel')}: {pendingRequest.transactionRef}
           </Text>
           <Text style={styles.pendingNote}>
-            Your request is awaiting admin verification.
+            {t('subscription.pendingMsg')}
           </Text>
         </View>
       )}
@@ -179,15 +184,15 @@ export default function SubscriptionPaymentScreen({ navigation }) {
         <>
           {/* How it works */}
           <View style={styles.howCard}>
-            <Text style={styles.howTitle}>💳 How to Renew</Text>
-            <Text style={styles.howStep}>1. Choose a plan below</Text>
-            <Text style={styles.howStep}>2. Send payment via El Dahabya to account: <Text style={styles.howHighlight}>0799-xxx-xxxx</Text></Text>
-            <Text style={styles.howStep}>3. Enter the transaction reference number</Text>
-            <Text style={styles.howStep}>4. Admin activates your subscription within 24h</Text>
+            <Text style={styles.howTitle}>💳 {t('subscription.howToRenewTitle')}</Text>
+            <Text style={styles.howStep}>1. {t('subscription.step1')}</Text>
+            <Text style={styles.howStep}>2. {t('subscription.step2')}</Text>
+            <Text style={styles.howStep}>3. {t('subscription.step3')}</Text>
+            <Text style={styles.howStep}>4. {t('subscription.step4')}</Text>
           </View>
 
           {/* Plan selection */}
-          <Text style={styles.sectionTitle}>Choose a Plan</Text>
+          <Text style={styles.sectionTitle}>{t('subscription.choosePlan')}</Text>
           {SUBSCRIPTION_PLANS.map(plan => (
             <TouchableOpacity
               key={plan.id}
@@ -208,12 +213,12 @@ export default function SubscriptionPaymentScreen({ navigation }) {
           ))}
 
           {/* Transaction reference */}
-          <Text style={styles.sectionTitle}>Transaction Reference</Text>
+          <Text style={styles.sectionTitle}>{t('subscription.transactionRef')}</Text>
           <TextInput
             style={styles.input}
             value={transactionRef}
             onChangeText={setTransactionRef}
-            placeholder="Enter El Dahabya transaction ref..."
+            placeholder={t('subscription.transactionRefPlaceholder')}
             autoCapitalize="characters"
           />
 
@@ -225,7 +230,7 @@ export default function SubscriptionPaymentScreen({ navigation }) {
           >
             {submitting
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.submitBtnText}>Submit Renewal Request</Text>
+              : <Text style={styles.submitBtnText}>{t('subscription.submitRenewal')}</Text>
             }
           </TouchableOpacity>
         </>

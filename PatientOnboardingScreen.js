@@ -5,8 +5,13 @@ import {
 } from 'react-native';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from './LanguageContext';
+import i18n from './i18n';
 
 export default function PatientOnboardingScreen({ navigation }) {
+  const { t } = useTranslation('screens');
+  const { isRTL } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -58,27 +63,27 @@ export default function PatientOnboardingScreen({ navigation }) {
   const handleContinue = async () => {
     // Validation
     if (!fullName.trim()) {
-      Alert.alert('Missing Info', 'Please enter your full name');
+      Alert.alert(i18n.t('screens:onboarding.missingName'), i18n.t('screens:onboarding.missingName'));
       return;
     }
     if (!age.trim()) {
-      Alert.alert('Missing Info', 'Please enter your age');
+      Alert.alert(i18n.t('screens:onboarding.missingAge'), i18n.t('screens:onboarding.missingAge'));
       return;
     }
     if (parseInt(age) < 13 || parseInt(age) > 120) {
-      Alert.alert('Invalid Age', 'Please enter a valid age between 13 and 120');
+      Alert.alert(i18n.t('screens:onboarding.invalidAge'), i18n.t('screens:onboarding.invalidAge'));
       return;
     }
     if (!phone.trim() && !email.trim()) {
-      Alert.alert('Missing Info', 'Please provide either a phone number or email');
+      Alert.alert(i18n.t('screens:onboarding.missingContact'), i18n.t('screens:onboarding.missingContact'));
       return;
     }
     if (phone.trim() && !validateAlgerianPhone(phone)) {
-      Alert.alert('Invalid Phone', 'Use Algerian format: 05xxxxxxxx');
+      Alert.alert(i18n.t('screens:onboarding.invalidPhone'), i18n.t('screens:onboarding.invalidPhone'));
       return;
     }
     if (email.trim() && !validateEmail(email)) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      Alert.alert(i18n.t('screens:onboarding.invalidEmail'), i18n.t('screens:onboarding.invalidEmail'));
       return;
     }
 
@@ -102,11 +107,11 @@ export default function PatientOnboardingScreen({ navigation }) {
         completedPatientOnboarding: new Date(),
       });
 
-      Alert.alert('✅ Success', 'Your profile is ready! Searching for doctors...');
+      Alert.alert(i18n.t('screens:onboarding.successTitle'), i18n.t('screens:onboarding.successMsg'));
       navigation.replace('PatientMap');
     } catch (error) {
       console.log("Save error:", error);
-      Alert.alert('Error', 'Failed to save your information: ' + error.message);
+      Alert.alert(i18n.t('screens:onboarding.saveError'), i18n.t('screens:onboarding.saveError') + error.message);
     } finally {
       setSaving(false);
     }
@@ -116,7 +121,7 @@ export default function PatientOnboardingScreen({ navigation }) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#059669" />
-        <Text style={styles.loadingText}>Setting up your profile...</Text>
+        <Text style={styles.loadingText}>{t('onboarding.loadingText')}</Text>
       </View>
     );
   }
@@ -124,15 +129,15 @@ export default function PatientOnboardingScreen({ navigation }) {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      style={styles.container}
+      style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerIcon}>👋</Text>
-          <Text style={styles.headerTitle}>Welcome to Dawini!</Text>
-          <Text style={styles.headerSubtitle}>Let's get to know you</Text>
+          <Text style={styles.headerTitle}>{t('onboarding.title')}</Text>
+          <Text style={styles.headerSubtitle}>{t('onboarding.subtitle')}</Text>
         </View>
 
         {/* Progress Bar */}
@@ -140,14 +145,14 @@ export default function PatientOnboardingScreen({ navigation }) {
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: '50%' }]} />
           </View>
-          <Text style={styles.progressText}>Step 1 of 1</Text>
+          <Text style={styles.progressText}>{t('onboarding.step')}</Text>
         </View>
 
         {/* Info Section */}
         <View style={styles.infoBox}>
           <Text style={styles.infoIcon}>ℹ️</Text>
           <Text style={styles.infoText}>
-            This information helps doctors provide better care and remember you
+            {t('onboarding.infoText')}
           </Text>
         </View>
 
@@ -157,12 +162,12 @@ export default function PatientOnboardingScreen({ navigation }) {
           {/* Full Name */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              <Text style={styles.required}>*</Text> Full Name
+              <Text style={styles.required}>*</Text> {t('onboarding.fullNameLabel')}
             </Text>
-            <Text style={styles.hint}>How doctors will call you</Text>
+            <Text style={styles.hint}>{t('onboarding.fullNameHint')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. Ahmed Ben Ali"
+              placeholder={t('onboarding.fullNamePlaceholder')}
               value={fullName}
               onChangeText={setFullName}
               placeholderTextColor="#cbd5e1"
@@ -173,12 +178,12 @@ export default function PatientOnboardingScreen({ navigation }) {
           {/* Age */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              <Text style={styles.required}>*</Text> Age
+              <Text style={styles.required}>*</Text> {t('onboarding.ageLabel')}
             </Text>
-            <Text style={styles.hint}>Help doctors understand your health needs</Text>
+            <Text style={styles.hint}>{t('onboarding.ageHint')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. 28"
+              placeholder={t('onboarding.agePlaceholder')}
               keyboardType="number-pad"
               value={age}
               onChangeText={setAge}
@@ -191,17 +196,17 @@ export default function PatientOnboardingScreen({ navigation }) {
           {/* Contact Info Section */}
           <View style={styles.contactSection}>
             <Text style={styles.contactTitle}>
-              <Text style={styles.required}>*</Text> How should we reach you?
+              <Text style={styles.required}>*</Text> {t('onboarding.contactTitle')}
             </Text>
-            <Text style={styles.contactHint}>Provide at least one contact method</Text>
+            <Text style={styles.contactHint}>{t('onboarding.contactHint')}</Text>
 
             {/* Phone */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>📱 Phone Number</Text>
-              <Text style={styles.hint}>Algerian format: 05xxxxxxxx</Text>
+              <Text style={styles.label}>📱 {t('onboarding.phoneLabel')}</Text>
+              <Text style={styles.hint}>{t('onboarding.phoneHint')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="05XX XXX XXX"
+                placeholder={t('onboarding.phonePlaceholder')}
                 keyboardType="phone-pad"
                 value={phone}
                 onChangeText={setPhone}
@@ -213,10 +218,10 @@ export default function PatientOnboardingScreen({ navigation }) {
 
             {/* Email */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>📧 Email Address</Text>
+              <Text style={styles.label}>📧 {t('onboarding.emailLabel')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="your@email.com"
+                placeholder={t('onboarding.emailPlaceholder')}
                 keyboardType="email-address"
                 value={email}
                 onChangeText={setEmail}
@@ -229,14 +234,14 @@ export default function PatientOnboardingScreen({ navigation }) {
 
           {/* Relative Info Section */}
           <View style={styles.contactSection}>
-            <Text style={styles.contactTitle}>👨‍👩‍👧 Relative Information (Optional)</Text>
-            <Text style={styles.contactHint}>Save this if you often book for someone else</Text>
+            <Text style={styles.contactTitle}>👨‍👩‍👧 {t('onboarding.relativeTitle')}</Text>
+            <Text style={styles.contactHint}>{t('onboarding.relativeHint')}</Text>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Relative Full Name</Text>
+              <Text style={styles.label}>{t('onboarding.relativeNameLabel')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Mother / Father name"
+                placeholder={t('onboarding.relativeNamePlaceholder')}
                 value={relativeName}
                 onChangeText={setRelativeName}
                 placeholderTextColor="#cbd5e1"
@@ -245,10 +250,10 @@ export default function PatientOnboardingScreen({ navigation }) {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Relationship</Text>
+              <Text style={styles.label}>{t('onboarding.relativeRelationLabel')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Mother, Father, Child"
+                placeholder={t('onboarding.relativeRelationPlaceholder')}
                 value={relativeRelation}
                 onChangeText={setRelativeRelation}
                 placeholderTextColor="#cbd5e1"
@@ -257,10 +262,10 @@ export default function PatientOnboardingScreen({ navigation }) {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Relative Age</Text>
+              <Text style={styles.label}>{t('onboarding.relativeAgeLabel')}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. 62"
+                placeholder={t('onboarding.relativeAgePlaceholder')}
                 keyboardType="number-pad"
                 value={relativeAge}
                 onChangeText={setRelativeAge}
@@ -275,7 +280,7 @@ export default function PatientOnboardingScreen({ navigation }) {
           <View style={styles.privacyBox}>
             <Text style={styles.privacyIcon}>🔒</Text>
             <Text style={styles.privacyText}>
-              Your information is secure and only shared with doctors you book appointments with
+              {t('onboarding.privacyText')}
             </Text>
           </View>
 
@@ -291,7 +296,7 @@ export default function PatientOnboardingScreen({ navigation }) {
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Text style={styles.buttonText}>Continue to Search</Text>
+              <Text style={styles.buttonText}>{t('onboarding.continueBtn')}</Text>
               <Text style={styles.buttonArrow}>→</Text>
             </>
           )}
