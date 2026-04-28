@@ -91,10 +91,16 @@ const resources = {
       terms: {
         title: 'Terms & Conditions',
         subtitle: 'Please read and accept our terms',
+        iAccept: 'I accept the Terms & Conditions',
         acceptBtn: 'I Accept the Terms',
         declineBtn: 'Decline',
+        declineTitle: 'Decline Terms',
         declineAlert: 'You must accept the terms to use Dawini.',
         scrollHint: 'Please scroll to read all terms before accepting.',
+        acceptanceRequired: 'Please accept the terms to continue.',
+        acceptedTitle: 'Success',
+        acceptedMsg: 'Thank you for accepting our terms. Continuing...',
+        errorAccepting: 'Error accepting terms. Please try again.',
       },
       onboarding: {
         title: 'Welcome to Dawini!',
@@ -639,10 +645,16 @@ const resources = {
       terms: {
         title: 'الشروط والأحكام',
         subtitle: 'يرجى قراءة شروطنا والموافقة عليها',
+        iAccept: 'أوافق على الشروط والأحكام',
         acceptBtn: 'أوافق على الشروط',
         declineBtn: 'رفض',
+        declineTitle: 'رفض الشروط',
         declineAlert: 'يجب قبول الشروط لاستخدام داويني.',
         scrollHint: 'يرجى التمرير لقراءة جميع الشروط قبل القبول.',
+        acceptanceRequired: 'يرجى قبول الشروط للمتابعة.',
+        acceptedTitle: 'نجاح',
+        acceptedMsg: 'شكراً لقبولك شروطنا. جاري المتابعة...',
+        errorAccepting: 'خطأ في قبول الشروط. يرجى المحاولة مجددا.',
       },
       onboarding: {
         title: 'مرحباً بك في داويني!',
