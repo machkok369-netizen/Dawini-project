@@ -86,7 +86,7 @@ export default function LoginScreen({ navigation }) {
       const userData = userDoc.data();
 
       if (!userData) {
-        Alert.alert(t('login.title'), t('login.errorEmptyFields'));
+        Alert.alert(t('login.title'), 'User profile not found. Please register first.');
         return;
       }
 

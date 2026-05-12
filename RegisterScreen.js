@@ -154,7 +154,7 @@ export default function RegisterScreen({ navigation, route }) {
 
     try {
       let signedInUser = auth.currentUser;
-      const shouldPromptForAuth = !signedInUser || (incomingGoogleUser && signedInUser.uid !== incomingGoogleUser.uid);
+      const shouldPromptForAuth = !signedInUser;
       if (shouldPromptForAuth) {
         const result = await promptAsync();
         if (result.type !== 'success') {
