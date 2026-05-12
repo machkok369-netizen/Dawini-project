@@ -40,7 +40,7 @@ export default function RegisterScreen({ navigation, route }) {
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
   });
 
-  const continueWithNewUser = (uid) => {
+  const routeNewUserToOnboarding = (uid) => {
     if (role === 'patient') {
       navigation.replace('TermsAcceptance', {
         uid,
@@ -55,7 +55,7 @@ export default function RegisterScreen({ navigation, route }) {
     }
   };
 
-  const continueWithExistingUser = (uid, userData) => {
+  const routeExistingUser = (uid, userData) => {
     let nextScreen;
     let nextScreenParams;
 
@@ -129,7 +129,7 @@ export default function RegisterScreen({ navigation, route }) {
 
       await setDoc(doc(db, 'users', userCredential.user.uid), userData);
       Alert.alert(i18n.t('screens:register.successTitle'), i18n.t('screens:register.successMsg'));
-      continueWithNewUser(userCredential.user.uid);
+      routeNewUserToOnboarding(userCredential.user.uid);
     } catch (error) {
       Alert.alert(i18n.t('screens:register.title'), error.message);
     } finally {
@@ -154,7 +154,8 @@ export default function RegisterScreen({ navigation, route }) {
 
     try {
       let signedInUser = auth.currentUser;
-      if (!signedInUser || (incomingGoogleUser && signedInUser.uid !== incomingGoogleUser.uid)) {
+      const shouldPromptForAuth = !signedInUser || (incomingGoogleUser && signedInUser.uid !== incomingGoogleUser.uid);
+      if (shouldPromptForAuth) {
         const result = await promptAsync();
         if (result.type !== 'success') {
           return;
@@ -174,13 +175,13 @@ export default function RegisterScreen({ navigation, route }) {
       const userDocRef = doc(db, 'users', signedInUser.uid);
       const userDoc = await getDoc(userDocRef);
       if (userDoc.exists()) {
-        continueWithExistingUser(signedInUser.uid, userDoc.data());
+        routeExistingUser(signedInUser.uid, userDoc.data());
         return;
       }
 
       await setDoc(userDocRef, buildUserData(signedInUser));
       Alert.alert(i18n.t('screens:register.successTitle'), i18n.t('screens:register.successMsg'));
-      continueWithNewUser(signedInUser.uid);
+      routeNewUserToOnboarding(signedInUser.uid);
     } catch (error) {
       Alert.alert('Google Sign-In', error.message);
     } finally {

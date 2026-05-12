@@ -35,7 +35,7 @@ export default function LoginScreen({ navigation }) {
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
   });
 
-  const continueWithUserData = (uid, userData) => {
+  const routeUserAfterLogin = (uid, userData) => {
     let nextScreen;
     let nextScreenParams;
 
@@ -90,7 +90,7 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      continueWithUserData(userCredential.user.uid, userData);
+      routeUserAfterLogin(userCredential.user.uid, userData);
     } catch (error) {
       Alert.alert(t('login.title'), error.message);
     } finally {
@@ -135,7 +135,7 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      continueWithUserData(userCredential.user.uid, userDoc.data());
+      routeUserAfterLogin(userCredential.user.uid, userDoc.data());
     } catch (error) {
       Alert.alert('Google Sign-In', error.message);
     } finally {
