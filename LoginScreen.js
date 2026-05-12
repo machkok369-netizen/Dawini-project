@@ -8,6 +8,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import { GoogleAuthProvider, signInWithCredential, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
+import { routeAuthenticatedUser } from './authNavigation';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from './LanguageContext';
 
@@ -35,35 +36,6 @@ export default function LoginScreen({ navigation }) {
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
   });
 
-  const routeUserAfterLogin = (uid, userData) => {
-    let nextScreen;
-    let nextScreenParams;
-
-    if (userData.role === 'doctor') {
-      if (!userData.profileCompleted) {
-        nextScreen = 'EditProfile';
-        nextScreenParams = { isNewDoctor: true };
-      } else {
-        nextScreen = 'DoctorDashboard';
-      }
-    } else if (!userData.patientProfileCompleted) {
-      nextScreen = 'PatientOnboarding';
-    } else {
-      nextScreen = 'PatientMap';
-    }
-
-    if (!userData.termsAccepted) {
-      navigation.replace('TermsAcceptance', {
-        uid,
-        nextScreen,
-        nextScreenParams,
-      });
-      return;
-    }
-
-    navigation.replace(nextScreen, nextScreenParams || {});
-  };
-
   const handleEmailLogin = async () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !password) {
@@ -86,11 +58,14 @@ export default function LoginScreen({ navigation }) {
       const userData = userDoc.data();
 
       if (!userData) {
-        Alert.alert(t('login.title'), 'User profile not found. Please register first.');
+        Alert.alert(
+          t('login.title'),
+          t('login.errorUserNotFound', { defaultValue: 'User profile not found. Please register first.' })
+        );
         return;
       }
 
-      routeUserAfterLogin(userCredential.user.uid, userData);
+      routeAuthenticatedUser(navigation, userCredential.user.uid, userData);
     } catch (error) {
       Alert.alert(t('login.title'), error.message);
     } finally {
@@ -100,11 +75,17 @@ export default function LoginScreen({ navigation }) {
 
   const handleGoogleLogin = async () => {
     if (!googleConfigReady) {
-      Alert.alert('Google Sign-In', 'Google credentials are missing. Please configure Google client IDs.');
+      Alert.alert(
+        t('login.googleTitle', { defaultValue: 'Google Sign-In' }),
+        t('login.googleMissingConfig', { defaultValue: 'Google credentials are missing. Please configure Google client IDs.' })
+      );
       return;
     }
     if (!request) {
-      Alert.alert('Google Sign-In', 'Google Sign-In is initializing, please try again.');
+      Alert.alert(
+        t('login.googleTitle', { defaultValue: 'Google Sign-In' }),
+        t('login.googleInitializing', { defaultValue: 'Google Sign-In is initializing, please try again.' })
+      );
       return;
     }
 
@@ -117,7 +98,10 @@ export default function LoginScreen({ navigation }) {
 
       const idToken = result.params?.id_token || result.authentication?.idToken;
       if (!idToken) {
-        Alert.alert('Google Sign-In', 'Google token was not returned. Please try again.');
+        Alert.alert(
+          t('login.googleTitle', { defaultValue: 'Google Sign-In' }),
+          t('login.googleTokenMissing', { defaultValue: 'Google token was not returned. Please try again.' })
+        );
         return;
       }
 
@@ -135,9 +119,9 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      routeUserAfterLogin(userCredential.user.uid, userDoc.data());
+      routeAuthenticatedUser(navigation, userCredential.user.uid, userDoc.data());
     } catch (error) {
-      Alert.alert('Google Sign-In', error.message);
+      Alert.alert(t('login.googleTitle', { defaultValue: 'Google Sign-In' }), error.message);
     } finally {
       setLoading(false);
     }
@@ -194,7 +178,7 @@ export default function LoginScreen({ navigation }) {
           onPress={handleGoogleLogin}
           disabled={loading || !request}
         >
-          <Text style={styles.googleButtonText}>Continue with Google</Text>
+          <Text style={styles.googleButtonText}>{t('login.continueWithGoogle', { defaultValue: 'Continue with Google' })}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.registerContainer} onPress={() => navigation.navigate('Register')}>

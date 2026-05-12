@@ -8,6 +8,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
+import { routeAuthenticatedUser } from './authNavigation';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from './LanguageContext';
 import i18n from './i18n';
@@ -53,35 +54,6 @@ export default function RegisterScreen({ navigation, route }) {
         nextScreenParams: { isNewDoctor: true },
       });
     }
-  };
-
-  const routeExistingUser = (uid, userData) => {
-    let nextScreen;
-    let nextScreenParams;
-
-    if (userData.role === 'doctor') {
-      if (!userData.profileCompleted) {
-        nextScreen = 'EditProfile';
-        nextScreenParams = { isNewDoctor: true };
-      } else {
-        nextScreen = 'DoctorDashboard';
-      }
-    } else if (!userData.patientProfileCompleted) {
-      nextScreen = 'PatientOnboarding';
-    } else {
-      nextScreen = 'PatientMap';
-    }
-
-    if (!userData.termsAccepted) {
-      navigation.replace('TermsAcceptance', {
-        uid,
-        nextScreen,
-        nextScreenParams,
-      });
-      return;
-    }
-
-    navigation.replace(nextScreen, nextScreenParams || {});
   };
 
   const validateRoleFields = () => {
@@ -142,11 +114,17 @@ export default function RegisterScreen({ navigation, route }) {
       return;
     }
     if (!googleConfigReady) {
-      Alert.alert('Google Sign-In', 'Google credentials are missing. Please configure Google client IDs.');
+      Alert.alert(
+        t('register.googleTitle', { defaultValue: 'Google Sign-In' }),
+        t('register.googleMissingConfig', { defaultValue: 'Google credentials are missing. Please configure Google client IDs.' })
+      );
       return;
     }
     if (!request && !incomingGoogleUser) {
-      Alert.alert('Google Sign-In', 'Google Sign-In is initializing, please try again.');
+      Alert.alert(
+        t('register.googleTitle', { defaultValue: 'Google Sign-In' }),
+        t('register.googleInitializing', { defaultValue: 'Google Sign-In is initializing, please try again.' })
+      );
       return;
     }
 
@@ -154,8 +132,7 @@ export default function RegisterScreen({ navigation, route }) {
 
     try {
       let signedInUser = auth.currentUser;
-      const shouldPromptForAuth = !signedInUser;
-      if (shouldPromptForAuth) {
+      if (!signedInUser) {
         const result = await promptAsync();
         if (result.type !== 'success') {
           return;
@@ -163,7 +140,10 @@ export default function RegisterScreen({ navigation, route }) {
 
         const idToken = result.params?.id_token || result.authentication?.idToken;
         if (!idToken) {
-          Alert.alert('Google Sign-In', 'Google token was not returned. Please try again.');
+          Alert.alert(
+            t('register.googleTitle', { defaultValue: 'Google Sign-In' }),
+            t('register.googleTokenMissing', { defaultValue: 'Google token was not returned. Please try again.' })
+          );
           return;
         }
 
@@ -175,7 +155,7 @@ export default function RegisterScreen({ navigation, route }) {
       const userDocRef = doc(db, 'users', signedInUser.uid);
       const userDoc = await getDoc(userDocRef);
       if (userDoc.exists()) {
-        routeExistingUser(signedInUser.uid, userDoc.data());
+        routeAuthenticatedUser(navigation, signedInUser.uid, userDoc.data());
         return;
       }
 
@@ -183,7 +163,7 @@ export default function RegisterScreen({ navigation, route }) {
       Alert.alert(i18n.t('screens:register.successTitle'), i18n.t('screens:register.successMsg'));
       routeNewUserToOnboarding(signedInUser.uid);
     } catch (error) {
-      Alert.alert('Google Sign-In', error.message);
+      Alert.alert(t('register.googleTitle', { defaultValue: 'Google Sign-In' }), error.message);
     } finally {
       setLoading(false);
     }
@@ -234,15 +214,15 @@ export default function RegisterScreen({ navigation, route }) {
         </View>
 
         {role === 'doctor' && (
-          <View style={{ width: '100%', marginTop: 10 }}>
+          <View style={styles.doctorFieldsContainer}>
             <TextInput
-              placeholder="Medical Specialty"
+              placeholder={t('register.specialtyPlaceholder', { defaultValue: 'Medical Specialty' })}
               style={styles.input}
               onChangeText={setSpecialty}
               value={specialty}
             />
             <TextInput
-              placeholder="Clinic Phone Number"
+              placeholder={t('register.clinicPhonePlaceholder', { defaultValue: 'Clinic Phone Number' })}
               style={styles.input}
               onChangeText={setPhone}
               value={phone}
@@ -267,7 +247,9 @@ export default function RegisterScreen({ navigation, route }) {
           disabled={loading || (!request && !incomingGoogleUser)}
         >
           <Text style={styles.googleButtonText}>
-            {incomingGoogleUser ? 'Complete Google Registration' : 'Continue with Google'}
+            {incomingGoogleUser
+              ? t('register.completeGoogleRegistration', { defaultValue: 'Complete Google Registration' })
+              : t('register.continueWithGoogle', { defaultValue: 'Continue with Google' })}
           </Text>
         </TouchableOpacity>
 
@@ -304,4 +286,5 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.7 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
   linkText: { textAlign: 'center', marginTop: 20, color: '#2ecc71', fontSize: 16 },
+  doctorFieldsContainer: { width: '100%', marginTop: 10 },
 });
