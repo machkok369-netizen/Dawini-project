@@ -42,3 +42,11 @@ Upon project creation, the ".expo" folder is already added to your ".gitignore" 
 
 - `payment_config/el_dahabya`
   - Bank integration placeholder document with reserved integration points.
+
+## Google authentication setup
+
+- Enable **Google** as a sign-in provider in your Firebase Authentication settings.
+- Add OAuth client IDs to `.env` (see `.env.example`):
+  - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
+  - `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
+  - `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
