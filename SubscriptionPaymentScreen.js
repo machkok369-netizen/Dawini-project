@@ -10,8 +10,8 @@ import { useLanguage } from './LanguageContext';
 import i18n from './i18n';
 
 const SUBSCRIPTION_PLANS = [
-  { id: '1week',  label: '1 Week',  price: 1500, weeks: 1, months: null },
-  { id: '1month', label: '1 Month', price: 5500, weeks: null, months: 1 },
+  { id: '1week',  label: '1 Week',  price: 1200, weeks: 1, months: null },
+  { id: '1month', label: '1 Month', price: 4800, weeks: null, months: 1 },
 ];
 
 export default function SubscriptionPaymentScreen({ navigation }) {
