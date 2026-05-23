@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "dawini",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -15,13 +16,15 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.boukerzazaboubakeur.dawini"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.boukerzazaboubakeur.dawini"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -37,6 +40,7 @@
     },
     "plugins": [
       "expo-localization",
+      "expo-auth-session",
       [
         "expo-notifications",
         {
