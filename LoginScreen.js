@@ -8,7 +8,6 @@ import * as Google from 'expo-auth-session/providers/google';
 import { GoogleAuthProvider, signInWithCredential, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
-import { routeAuthenticatedUser } from './authNavigation';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from './LanguageContext';
 
@@ -65,7 +64,34 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      routeAuthenticatedUser(navigation, userCredential.user.uid, userData);
+      // Determine next screen based on role and profile completion
+      let nextScreen, nextScreenParams;
+      if (userData.role === 'doctor') {
+        if (!userData.profileCompleted) {
+          nextScreen = 'EditProfile';
+          nextScreenParams = { isNewDoctor: true };
+        } else {
+          nextScreen = 'DoctorDashboard';
+        }
+      } else {
+        if (!userData.patientProfileCompleted) {
+          nextScreen = 'PatientOnboarding';
+        } else {
+          nextScreen = 'PatientMap';
+        }
+      }
+
+      // Redirect to Terms Acceptance if not yet accepted
+      if (!userData.termsAccepted) {
+        navigation.replace('TermsAcceptance', {
+          uid: userCredential.user.uid,
+          nextScreen,
+          nextScreenParams,
+        });
+        return;
+      }
+
+      navigation.replace(nextScreen, nextScreenParams || {});
     } catch (error) {
       Alert.alert(t('login.title'), error.message);
     } finally {
@@ -74,7 +100,15 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleGoogleLogin = async () => {
+    console.log('🔍 [Google Login] Starting...');
+    console.log('🔍 [Google Login] Web Client ID:', process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
+    console.log('🔍 [Google Login] iOS Client ID:', process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
+    console.log('🔍 [Google Login] Android Client ID:', process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID);
+    console.log('🔍 [Google Login] Google config ready:', googleConfigReady);
+    console.log('🔍 [Google Login] Request object:', request);
+
     if (!googleConfigReady) {
+      console.warn('❌ [Google Login] Google config not ready');
       Alert.alert(
         t('login.googleTitle', { defaultValue: 'Google Sign-In' }),
         t('login.googleMissingConfig', { defaultValue: 'Google credentials are missing. Please configure Google client IDs.' })
@@ -82,6 +116,7 @@ export default function LoginScreen({ navigation }) {
       return;
     }
     if (!request) {
+      console.warn('❌ [Google Login] Request not initialized');
       Alert.alert(
         t('login.googleTitle', { defaultValue: 'Google Sign-In' }),
         t('login.googleInitializing', { defaultValue: 'Google Sign-In is initializing, please try again.' })
@@ -91,13 +126,21 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
+      console.log('🔍 [Google Login] Calling promptAsync...');
       const result = await promptAsync();
+      console.log('🔍 [Google Login] Prompt result:', result);
+      console.log('🔍 [Google Login] Result type:', result.type);
+
       if (result.type !== 'success') {
+        console.warn('❌ [Google Login] Prompt was not successful:', result.type);
         return;
       }
 
       const idToken = result.params?.id_token || result.authentication?.idToken;
+      console.log('🔍 [Google Login] ID Token:', idToken ? '✓ Present' : '✗ Missing');
+
       if (!idToken) {
+        console.error('❌ [Google Login] No ID token returned');
         Alert.alert(
           t('login.googleTitle', { defaultValue: 'Google Sign-In' }),
           t('login.googleTokenMissing', { defaultValue: 'Google token was not returned. Please try again.' })
@@ -105,11 +148,18 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
+      console.log('🔍 [Google Login] Creating Firebase credential...');
       const credential = GoogleAuthProvider.credential(idToken);
+      console.log('🔍 [Google Login] Signing in with credential...');
       const userCredential = await signInWithCredential(auth, credential);
+      console.log('🔍 [Google Login] User signed in:', userCredential.user.uid);
+
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      console.log('🔍 [Google Login] User doc exists:', userDoc.exists());
 
       if (!userDoc.exists()) {
+        console.log('🔍 [Google Login] New user, redirecting to Register...');
+        // User doesn't exist, redirect to Register
         navigation.replace('Register', {
           googleUser: {
             uid: userCredential.user.uid,
@@ -119,8 +169,43 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      routeAuthenticatedUser(navigation, userCredential.user.uid, userDoc.data());
+      const userData = userDoc.data();
+      console.log('🔍 [Google Login] User data retrieved, role:', userData.role);
+
+      // Determine next screen based on role and profile completion
+      let nextScreen, nextScreenParams;
+      if (userData.role === 'doctor') {
+        if (!userData.profileCompleted) {
+          nextScreen = 'EditProfile';
+          nextScreenParams = { isNewDoctor: true };
+        } else {
+          nextScreen = 'DoctorDashboard';
+        }
+      } else {
+        if (!userData.patientProfileCompleted) {
+          nextScreen = 'PatientOnboarding';
+        } else {
+          nextScreen = 'PatientMap';
+        }
+      }
+
+      console.log('🔍 [Google Login] Next screen:', nextScreen);
+
+      // Redirect to Terms Acceptance if not yet accepted
+      if (!userData.termsAccepted) {
+        console.log('🔍 [Google Login] User needs to accept terms');
+        navigation.replace('TermsAcceptance', {
+          uid: userCredential.user.uid,
+          nextScreen,
+          nextScreenParams,
+        });
+        return;
+      }
+
+      console.log('✅ [Google Login] Navigating to:', nextScreen);
+      navigation.replace(nextScreen, nextScreenParams || {});
     } catch (error) {
+      console.error('❌ [Google Login] Error:', error);
       Alert.alert(t('login.googleTitle', { defaultValue: 'Google Sign-In' }), error.message);
     } finally {
       setLoading(false);
