@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Alert, TextInput
+  ActivityIndicator, Alert, TextInput, Clipboard
 } from 'react-native';
 import { doc, getDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
@@ -14,6 +14,8 @@ const SUBSCRIPTION_PLANS = [
   { id: '1month', label: '1 Month', price: 4800, weeks: null, months: 1 },
 ];
 
+const BARIDIMOB_ACCOUNT = '00799999001992152741';
+
 export default function SubscriptionPaymentScreen({ navigation }) {
   const { t } = useTranslation('screens');
   const { isRTL } = useLanguage();
@@ -24,6 +26,7 @@ export default function SubscriptionPaymentScreen({ navigation }) {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [transactionRef, setTransactionRef] = useState('');
   const [pendingRequest, setPendingRequest] = useState(null);
+  const [copiedText, setCopiedText] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -61,6 +64,16 @@ export default function SubscriptionPaymentScreen({ navigation }) {
     };
     loadData();
   }, []);
+
+  const copyToClipboard = async () => {
+    try {
+      await Clipboard.setString(BARIDIMOB_ACCOUNT);
+      setCopiedText(BARIDIMOB_ACCOUNT);
+      setTimeout(() => setCopiedText(''), 2000);
+    } catch (e) {
+      Alert.alert(i18n.t('common:error'), 'Failed to copy account number');
+    }
+  };
 
   const submitRenewalRequest = async () => {
     if (!selectedPlan) {
@@ -187,6 +200,20 @@ export default function SubscriptionPaymentScreen({ navigation }) {
             <Text style={styles.howTitle}>💳 {t('subscription.howToRenewTitle')}</Text>
             <Text style={styles.howStep}>1. {t('subscription.step1')}</Text>
             <Text style={styles.howStep}>2. {t('subscription.step2')}</Text>
+            <View style={styles.accountNumberContainer}>
+              <Text style={styles.accountNumberLabel}>📱 {t('subscription.accountNumber', { defaultValue: 'Account Number:' })}</Text>
+              <View style={styles.accountNumberBox}>
+                <Text style={styles.accountNumber}>{BARIDIMOB_ACCOUNT}</Text>
+                <TouchableOpacity 
+                  style={styles.copyButton}
+                  onPress={copyToClipboard}
+                >
+                  <Text style={styles.copyButtonText}>
+                    {copiedText === BARIDIMOB_ACCOUNT ? t('subscription.copied') : t('subscription.copy')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
             <Text style={styles.howStep}>3. {t('subscription.step3')}</Text>
             <Text style={styles.howStep}>4. {t('subscription.step4')}</Text>
           </View>
@@ -271,6 +298,27 @@ const styles = StyleSheet.create({
   howTitle: { fontSize: 15, fontWeight: '700', color: '#1e40af', marginBottom: 10 },
   howStep: { fontSize: 13, color: '#1e40af', marginBottom: 5, lineHeight: 20 },
   howHighlight: { fontWeight: '700', color: '#1d4ed8' },
+
+  accountNumberContainer: { marginVertical: 12, paddingVertical: 10 },
+  accountNumberLabel: { fontSize: 12, fontWeight: '700', color: '#1e40af', marginBottom: 8 },
+  accountNumberBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    gap: 10,
+  },
+  accountNumber: { flex: 1, fontSize: 14, fontWeight: '600', color: '#111827', fontFamily: 'monospace' },
+  copyButton: {
+    backgroundColor: '#1e40af',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  copyButtonText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 10, marginTop: 6 },
 
