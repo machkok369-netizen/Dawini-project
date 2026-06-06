@@ -1,212 +1,129 @@
-import React, { useMemo, useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
+import React, { useState } from 'react';
+import { 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, 
+  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView 
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
-import { routeAuthenticatedUser } from './authNavigation';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../contexts/LanguageContext';
 import i18n from '../i18n';
 
-WebBrowser.maybeCompleteAuthSession();
-
-export default function RegisterScreen({ navigation, route }) {
+export default function RegisterScreen({ navigation }) {
   const { t } = useTranslation('screens');
   const { isRTL } = useLanguage();
-  const incomingGoogleUser = route?.params?.googleUser;
-  const [email, setEmail] = useState(incomingGoogleUser?.email || '');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('patient');
+  const [role, setRole] = useState('patient'); 
   const [specialty, setSpecialty] = useState('');
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const googleConfigReady = useMemo(
-    () => Boolean(
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-      process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
-      process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID
-    ),
-    []
-  );
+const handleRegister = async () => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !password) {
+    Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorFillFields'));
+    return;
+  }
+  if (!emailRegex.test(email.trim())) {
+    Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorFillFields'));
+    return;
+  }
+  if (password.length < 6) {
+    Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorPasswordLength'));
+    return;
+  }
+  if (role === 'doctor' && !specialty.trim()) {
+    Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorFillFields'));
+    return;
+  }
 
-  const [request, , promptAsync] = Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-  });
+  setLoading(true);
 
-  const routeNewUserToOnboarding = (uid) => {
+  try {
+    console.log('📝 [Register] Step 1: Creating user with email:', email.trim());
+    const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    console.log('✅ [Register] Step 1 SUCCESS - User created, UID:', userCredential.user.uid);
+    
+    const user = userCredential.user;
+
+    const userData = {
+      uid: user.uid,
+      email: user.email,
+      role: role,
+      createdAt: new Date(),
+      isVerified: role === 'patient' ? true : false,
+      profileCompleted: false,
+      patientProfileCompleted: false,
+      termsAccepted: false,
+    };
+
+    console.log('📝 [Register] Step 2: Writing to Firestore at path: users/' + user.uid);
+    console.log('📝 [Register] Data being written:', userData);
+
+    await setDoc(doc(db, 'users', user.uid), userData);
+
+    console.log('✅ [Register] Step 2 SUCCESS - Firestore document created');
+    Alert.alert(i18n.t('screens:register.successTitle'), i18n.t('screens:register.successMsg'));
+
     if (role === 'patient') {
       navigation.replace('TermsAcceptance', {
-        uid,
+        uid: user.uid,
         nextScreen: 'PatientOnboarding',
       });
     } else {
       navigation.replace('TermsAcceptance', {
-        uid,
+        uid: user.uid,
         nextScreen: 'EditProfile',
         nextScreenParams: { isNewDoctor: true },
       });
     }
-  };
-
-  const validateRoleFields = () => {
-    if (role === 'doctor' && !specialty.trim()) {
-      Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorFillFields'));
-      return false;
-    }
-    return true;
-  };
-
-  const buildUserData = (user) => ({
-    uid: user.uid,
-    email: user.email,
-    role,
-    createdAt: new Date(),
-    isVerified: role === 'patient',
-    profileCompleted: false,
-    patientProfileCompleted: false,
-    termsAccepted: false,
-  });
-
-  const handleRegister = async () => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !password) {
-      Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorFillFields'));
-      return;
-    }
-    if (!emailRegex.test(email.trim())) {
-      Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorFillFields'));
-      return;
-    }
-    if (password.length < 6) {
-      Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorPasswordLength'));
-      return;
-    }
-    if (!validateRoleFields()) {
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      const userData = buildUserData(userCredential.user);
-
-      await setDoc(doc(db, 'users', userCredential.user.uid), userData);
-      Alert.alert(i18n.t('screens:register.successTitle'), i18n.t('screens:register.successMsg'));
-      routeNewUserToOnboarding(userCredential.user.uid);
-    } catch (error) {
-      Alert.alert(i18n.t('screens:register.title'), error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleRegister = async () => {
-    if (!validateRoleFields()) {
-      return;
-    }
-    if (!googleConfigReady) {
-      Alert.alert(
-        t('register.googleTitle', { defaultValue: 'Google Sign-In' }),
-        t('register.googleMissingConfig', { defaultValue: 'Google credentials are missing. Please configure Google client IDs.' })
-      );
-      return;
-    }
-    if (!request && !incomingGoogleUser) {
-      Alert.alert(
-        t('register.googleTitle', { defaultValue: 'Google Sign-In' }),
-        t('register.googleInitializing', { defaultValue: 'Google Sign-In is initializing, please try again.' })
-      );
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      let signedInUser = auth.currentUser;
-      if (!signedInUser) {
-        const result = await promptAsync();
-        if (result.type !== 'success') {
-          return;
-        }
-
-        const idToken = result.params?.id_token || result.authentication?.idToken;
-        if (!idToken) {
-          Alert.alert(
-            t('register.googleTitle', { defaultValue: 'Google Sign-In' }),
-            t('register.googleTokenMissing', { defaultValue: 'Google token was not returned. Please try again.' })
-          );
-          return;
-        }
-
-        const credential = GoogleAuthProvider.credential(idToken);
-        const userCredential = await signInWithCredential(auth, credential);
-        signedInUser = userCredential.user;
-      }
-
-      const userDocRef = doc(db, 'users', signedInUser.uid);
-      const userDoc = await getDoc(userDocRef);
-      if (userDoc.exists()) {
-        routeAuthenticatedUser(navigation, signedInUser.uid, userDoc.data());
-        return;
-      }
-
-      await setDoc(userDocRef, buildUserData(signedInUser));
-      Alert.alert(i18n.t('screens:register.successTitle'), i18n.t('screens:register.successMsg'));
-      routeNewUserToOnboarding(signedInUser.uid);
-    } catch (error) {
-      Alert.alert(t('register.googleTitle', { defaultValue: 'Google Sign-In' }), error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    console.error('❌ [Register] FULL ERROR:', error);
+    console.error('❌ [Register] Error Code:', error.code);
+    console.error('❌ [Register] Error Message:', error.message);
+    Alert.alert(i18n.t('screens:register.title'), error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
       style={[styles.container, { direction: isRTL ? 'rtl' : 'ltr' }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>{t('register.title')}</Text>
-
-        <TextInput
+        
+        <TextInput 
           placeholder={t('register.emailPlaceholder')}
-          style={styles.input}
-          onChangeText={setEmail}
+          style={styles.input} 
+          onChangeText={setEmail} 
           value={email}
           keyboardType="email-address"
           autoCapitalize="none"
-          editable={!incomingGoogleUser}
         />
-        {!incomingGoogleUser && (
-          <TextInput
-            placeholder={t('register.passwordPlaceholder')}
-            style={styles.input}
-            secureTextEntry
-            onChangeText={setPassword}
-            value={password}
-          />
-        )}
+        <TextInput 
+          placeholder={t('register.passwordPlaceholder')}
+          style={styles.input} 
+          secureTextEntry 
+          onChangeText={setPassword} 
+          value={password} 
+        />
 
         <Text style={styles.label}>{t('register.roleLabel')}</Text>
         <View style={styles.roleContainer}>
-          <TouchableOpacity
-            style={[styles.roleButton, role === 'patient' && styles.activeRole]}
+          <TouchableOpacity 
+            style={[styles.roleButton, role === 'patient' && styles.activeRole]} 
             onPress={() => setRole('patient')}
           >
             <Text style={role === 'patient' ? styles.activeText : styles.roleText}>{t('register.rolePatient')}</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.roleButton, role === 'doctor' && styles.activeRole]}
+          
+          <TouchableOpacity 
+            style={[styles.roleButton, role === 'doctor' && styles.activeRole]} 
             onPress={() => setRole('doctor')}
           >
             <Text style={role === 'doctor' ? styles.activeText : styles.roleText}>{t('register.roleDoctor')}</Text>
@@ -214,43 +131,29 @@ export default function RegisterScreen({ navigation, route }) {
         </View>
 
         {role === 'doctor' && (
-          <View style={styles.doctorFieldsContainer}>
-            <TextInput
-              placeholder={t('register.specialtyPlaceholder', { defaultValue: 'Medical Specialty' })}
-              style={styles.input}
-              onChangeText={setSpecialty}
-              value={specialty}
+          <View style={{ width: '100%', marginTop: 10 }}>
+            <TextInput 
+              placeholder="Medical Specialty" 
+              style={styles.input} 
+              onChangeText={setSpecialty} 
+              value={specialty} 
             />
-            <TextInput
-              placeholder={t('register.clinicPhonePlaceholder', { defaultValue: 'Clinic Phone Number' })}
-              style={styles.input}
-              onChangeText={setPhone}
-              value={phone}
+            <TextInput 
+              placeholder="Clinic Phone Number" 
+              style={styles.input} 
+              onChangeText={setPhone} 
+              value={phone} 
               keyboardType="phone-pad"
             />
           </View>
         )}
 
-        {!incomingGoogleUser && (
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleRegister}
-            disabled={loading}
-          >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('register.registerBtn')}</Text>}
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[styles.googleButton, (loading || (!request && !incomingGoogleUser)) && styles.buttonDisabled]}
-          onPress={handleGoogleRegister}
-          disabled={loading || (!request && !incomingGoogleUser)}
+        <TouchableOpacity 
+          style={[styles.button, loading && styles.buttonDisabled]} 
+          onPress={handleRegister}
+          disabled={loading}
         >
-          <Text style={styles.googleButtonText}>
-            {incomingGoogleUser
-              ? t('register.completeGoogleRegistration', { defaultValue: 'Complete Google Registration' })
-              : t('register.continueWithGoogle', { defaultValue: 'Continue with Google' })}
-          </Text>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('register.registerBtn')}</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -259,7 +162,7 @@ export default function RegisterScreen({ navigation, route }) {
       </ScrollView>
     </KeyboardAvoidingView>
   );
-}
+} 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
@@ -273,18 +176,7 @@ const styles = StyleSheet.create({
   roleText: { color: '#2ecc71', fontWeight: 'bold' },
   activeText: { color: '#fff', fontWeight: 'bold' },
   button: { backgroundColor: '#2ecc71', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 10 },
-  googleButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  googleButtonText: { color: '#111827', fontWeight: '700', fontSize: 16 },
   buttonDisabled: { opacity: 0.7 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
   linkText: { textAlign: 'center', marginTop: 20, color: '#2ecc71', fontSize: 16 },
-  doctorFieldsContainer: { width: '100%', marginTop: 10 },
 });
