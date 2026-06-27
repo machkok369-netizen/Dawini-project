@@ -12,7 +12,9 @@ import {
 import { db, auth } from './firebaseConfig';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from './LanguageContext';
+import { useTheme } from './ThemeContext';
 import i18n from './i18n';
+import { Feather } from '@expo/vector-icons';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -23,11 +25,22 @@ const STATUS_COLORS = {
 };
 
 const SPECIALTIES = [
-  'All',
-  'General Practitioner', 'Dentist', 'Cardiologist', 'Pediatrician',
-  'Gynecologist', 'Ophthalmologist', 'Dermatologist', 'Orthopedist',
-  'ENT', 'Neurologist', 'Psychiatrist', 'Radiologist',
-  'Urologist', 'Endocrinologist', 'Other',
+  { key: 'All',                 tKey: 'patientMap.specialties.all' },
+  { key: 'General Practitioner', tKey: 'patientMap.specialties.generalPractitioner' },
+  { key: 'Dentist',             tKey: 'patientMap.specialties.dentist' },
+  { key: 'Cardiologist',        tKey: 'patientMap.specialties.cardiologist' },
+  { key: 'Pediatrician',        tKey: 'patientMap.specialties.pediatrician' },
+  { key: 'Gynecologist',        tKey: 'patientMap.specialties.gynecologist' },
+  { key: 'Ophthalmologist',     tKey: 'patientMap.specialties.ophthalmologist' },
+  { key: 'Dermatologist',       tKey: 'patientMap.specialties.dermatologist' },
+  { key: 'Orthopedist',         tKey: 'patientMap.specialties.orthopedist' },
+  { key: 'ENT',                 tKey: 'patientMap.specialties.ent' },
+  { key: 'Neurologist',         tKey: 'patientMap.specialties.neurologist' },
+  { key: 'Psychiatrist',        tKey: 'patientMap.specialties.psychiatrist' },
+  { key: 'Radiologist',         tKey: 'patientMap.specialties.radiologist' },
+  { key: 'Urologist',           tKey: 'patientMap.specialties.urologist' },
+  { key: 'Endocrinologist',     tKey: 'patientMap.specialties.endocrinologist' },
+  { key: 'Other',               tKey: 'patientMap.specialties.other' },
 ];
 
 const normalizeText = (str = '') =>
@@ -60,6 +73,8 @@ export default function PatientMapScreen({ navigation, route }) {
   const isDoctor = route?.params?.isDoctor || false;
   const { t } = useTranslation('screens');
   const { isRTL } = useLanguage();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [doctors, setDoctors]           = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -107,7 +122,7 @@ export default function PatientMapScreen({ navigation, route }) {
     const requestLocationPermission = () =>
       new Promise((resolve) => {
         Alert.alert(
-          `📍 ${t('patientMap.locationTitle')}`,
+          t('patientMap.locationTitle'),
           t('patientMap.locationMsg'),
           [
             { text: t('patientMap.locationSkip'), style: 'cancel', onPress: () => resolve(false) },
@@ -368,7 +383,7 @@ export default function PatientMapScreen({ navigation, route }) {
       }
 
       Alert.alert(
-        '✅',
+        'Dawini',
         acceptMode === 'auto'
           ? i18n.t('screens:patientMap.bookedConfirmed')
           : i18n.t('screens:patientMap.bookedPending')
@@ -408,7 +423,7 @@ export default function PatientMapScreen({ navigation, route }) {
         isPublicComment: true,
         createdAt: serverTimestamp(),
       });
-      Alert.alert('🙏', i18n.t('screens:patientMap.reviewThanks'));
+      Alert.alert('Dawini', i18n.t('screens:patientMap.reviewThanks'));
       setRatingVisible(false);
       setRatingStars(0); setRatingWait(0); setRatingAttitude(0);
       setRatingCleanliness(0); setRatingComment('');
@@ -449,7 +464,7 @@ export default function PatientMapScreen({ navigation, route }) {
         status: 'new',
         createdAt: serverTimestamp(),
       });
-      Alert.alert('🙏', i18n.t('screens:patientMap.suggestionThanks'));
+      Alert.alert('Dawini', i18n.t('screens:patientMap.suggestionThanks'));
       setSuggestionText('');
       setSuggestionVisible(false);
     } catch (e) {
@@ -465,8 +480,8 @@ export default function PatientMapScreen({ navigation, route }) {
       <Text style={styles.starLabel}>{label}</Text>
       <View style={styles.stars}>
         {[1, 2, 3, 4, 5].map(i => (
-          <TouchableOpacity key={i} onPress={() => onChange(i)}>
-            <Text style={[styles.star, i <= value && styles.starFilled]}>★</Text>
+          <TouchableOpacity key={i} onPress={() => onChange(i)} style={{ paddingHorizontal: 2 }}>
+            <Feather name="star" size={28} color={i <= value ? '#f59e0b' : colors.border} />
           </TouchableOpacity>
         ))}
       </View>
@@ -487,17 +502,23 @@ export default function PatientMapScreen({ navigation, route }) {
           <Image source={{ uri: doctor.photoMain }} style={styles.doctorCardPhoto} />
         ) : (
           <View style={[styles.doctorCardPhoto, styles.doctorCardPhotoPlaceholder]}>
-            <Text style={{ fontSize: 28 }}>🏥</Text>
+            <Feather name="user" size={28} color={colors.primary} />
           </View>
         )}
         <View style={styles.doctorCardInfo}>
           <View style={styles.doctorCardTopRow}>
             <Text style={styles.doctorCardName} numberOfLines={1}>Dr. {doctor.fullName}</Text>
-            <Text style={styles.doctorCardRating}>⭐ {doctor.averageRating || '0.0'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              <Feather name="star" size={12} color="#f59e0b" />
+              <Text style={styles.doctorCardRating}>{doctor.averageRating || '0.0'}</Text>
+            </View>
           </View>
           <Text style={styles.doctorCardSpecialty} numberOfLines={1}>{doctor.specialty}</Text>
           {doctor.distanceKm != null && (
-            <Text style={styles.doctorCardDistance}>📍 {doctor.distanceKm.toFixed(2)} {t('patientMap.kmAway')}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+              <Feather name="map-pin" size={11} color={colors.success} />
+              <Text style={styles.doctorCardDistance}>{doctor.distanceKm.toFixed(2)} {t('patientMap.kmAway')}</Text>
+            </View>
           )}
           <View style={styles.doctorCardStatusRow}>
             <View style={[styles.doctorCardStatusDot, { backgroundColor: statusColor }]} />
@@ -527,7 +548,7 @@ export default function PatientMapScreen({ navigation, route }) {
             onPress={() => navigation.navigate('AppointmentHistory')}
             activeOpacity={0.8}
           >
-            <Text style={styles.apptBannerIcon}>📅</Text>
+            <Feather name="calendar" size={20} color="#fff" style={{ marginRight: 10 }} />
             <View style={styles.apptBannerInfo}>
               <Text style={styles.apptBannerTitle} numberOfLines={1}>
                 Dr. {upcomingAppointment.doctorName || 'Doctor'}
@@ -543,7 +564,7 @@ export default function PatientMapScreen({ navigation, route }) {
               style={styles.apptBannerNav}
               onPress={() => handleGoNow({ location: upcomingAppointment.doctorLocation, fullName: upcomingAppointment.doctorName })}
             >
-              <Text style={styles.apptBannerNavText}>🗺️</Text>
+              <Feather name="navigation" size={18} color="#fff" />
             </TouchableOpacity>
           )}
         </View>
@@ -552,17 +573,17 @@ export default function PatientMapScreen({ navigation, route }) {
       {/* ── Search bar ── */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Feather name="search" size={17} color="#9ca3af" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder={t('patientMap.searchPlaceholder')}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={colors.placeholder}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text style={styles.searchClear}>✕</Text>
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={{ paddingLeft: 8 }}>
+              <Feather name="x" size={16} color={colors.textTertiary} />
             </TouchableOpacity>
           )}
         </View>
@@ -573,12 +594,12 @@ export default function PatientMapScreen({ navigation, route }) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBar}>
           {SPECIALTIES.map(spec => (
             <TouchableOpacity
-              key={spec}
-              style={[styles.filterChip, selectedFilter === spec && styles.filterChipActive]}
-              onPress={() => setSelectedFilter(spec)}
+              key={spec.key}
+              style={[styles.filterChip, selectedFilter === spec.key && styles.filterChipActive]}
+              onPress={() => setSelectedFilter(spec.key)}
             >
-              <Text style={[styles.filterChipText, selectedFilter === spec && styles.filterChipTextActive]}>
-                {spec}
+              <Text style={[styles.filterChipText, selectedFilter === spec.key && styles.filterChipTextActive]}>
+                {t(spec.tKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -588,8 +609,9 @@ export default function PatientMapScreen({ navigation, route }) {
       {/* ── Results count & back button ── */}
       <View style={styles.countRow}>
         {isDoctor && (
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.backBtnText}>← {t('patientMap.backToList')}</Text>
+          <TouchableOpacity style={[styles.backBtn, { flexDirection: 'row', alignItems: 'center', gap: 4 }]} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={14} color={colors.primary} />
+            <Text style={styles.backBtnText}>{t('patientMap.backToList')}</Text>
           </TouchableOpacity>
         )}
         <Text style={styles.countText}>
@@ -606,24 +628,15 @@ export default function PatientMapScreen({ navigation, route }) {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>🔍</Text>
+            <View style={styles.emptyIconWrap}>
+              <Feather name="search" size={32} color="#A09890" />
+            </View>
             <Text style={styles.emptyText}>{t('patientMap.noDoctors')}</Text>
             <Text style={styles.emptySubText}>{t('patientMap.noDoctorsHint')}</Text>
           </View>
         }
       />
 
-      {!isDoctor && (
-        <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('PatientProfile')}>
-          <Text style={styles.profileBtnText}>👤</Text>
-        </TouchableOpacity>
-      )}
-
-      {!isDoctor && (
-        <TouchableOpacity style={styles.suggestionBtn} onPress={() => setSuggestionVisible(true)}>
-          <Text style={styles.suggestionBtnText}>💡</Text>
-        </TouchableOpacity>
-      )}
 
       {/* ── Doctor card bottom sheet ── */}
       <Modal visible={cardVisible} transparent animationType="slide" onRequestClose={() => setCardVisible(false)}>
@@ -641,25 +654,32 @@ export default function PatientMapScreen({ navigation, route }) {
                   {selectedDoctor.photoMain ? (
                     <Image source={{ uri: selectedDoctor.photoMain }} style={styles.cardPhoto} />
                   ) : (
-                    <View style={[styles.cardPhoto, { backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center' }]}>
-                      <Text style={{ fontSize: 24 }}>🏥</Text>
+                    <View style={[styles.cardPhoto, { backgroundColor: colors.primaryLight, justifyContent: 'center', alignItems: 'center' }]}>
+                      <Feather name="user" size={32} color={colors.primary} />
                     </View>
                   )}
                   <View style={styles.cardInfo}>
                     <View style={styles.cardTopRow}>
                       <Text style={styles.cardName}>Dr. {selectedDoctor.fullName}</Text>
-                      <View style={styles.cardRatingBadge}>
-                        <Text style={styles.cardRatingText}>⭐ {selectedDoctor.averageRating || '0.0'}</Text>
+                      <View style={[styles.cardRatingBadge, { flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
+                        <Feather name="star" size={11} color="#b45309" />
+                        <Text style={styles.cardRatingText}>{selectedDoctor.averageRating || '0.0'}</Text>
                       </View>
                     </View>
                     {selectedDoctor.fullNameAr ? <Text style={styles.cardNameAr}>{selectedDoctor.fullNameAr}</Text> : null}
                     <Text style={styles.cardSpecialty}>{selectedDoctor.specialty}</Text>
                     <Text style={styles.cardCabinet}>{selectedDoctor.cabinetName}</Text>
                     {selectedDoctor.distanceKm != null ? (
-                      <Text style={styles.cardDistance}>📍 {selectedDoctor.distanceKm.toFixed(2)} {t('patientMap.kmAway')}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <Feather name="map-pin" size={11} color={colors.success} />
+                        <Text style={styles.cardDistance}>{selectedDoctor.distanceKm.toFixed(2)} {t('patientMap.kmAway')}</Text>
+                      </View>
                     ) : null}
                     {selectedDoctor.experience ? (
-                      <Text style={styles.cardExperience}>🎓 {selectedDoctor.experience} yrs experience</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                        <Feather name="award" size={11} color={colors.textSecondary} />
+                        <Text style={styles.cardExperience}>{selectedDoctor.experience} yrs experience</Text>
+                      </View>
                     ) : null}
                     <View style={styles.cardStatusRow}>
                       <View style={[styles.cardStatusDot, { backgroundColor: STATUS_COLORS[selectedDoctor.status] || '#9ca3af' }]} />
@@ -689,9 +709,10 @@ export default function PatientMapScreen({ navigation, route }) {
                   </View>
                   <View style={styles.cardStatDivider} />
                   <View style={styles.cardStat}>
-                    <Text style={styles.cardStatValue}>
-                      {selectedDoctor.averageRating ? `${selectedDoctor.averageRating}★` : '—'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <Text style={styles.cardStatValue}>{selectedDoctor.averageRating || '—'}</Text>
+                      {selectedDoctor.averageRating ? <Feather name="star" size={13} color="#f59e0b" /> : null}
+                    </View>
                     <Text style={styles.cardStatLabel}>{t('patientMap.rating')}</Text>
                   </View>
                 </View>
@@ -700,10 +721,16 @@ export default function PatientMapScreen({ navigation, route }) {
                 {(selectedDoctor.city || selectedDoctor.address || selectedDoctor.workingHours) ? (
                   <View style={styles.cardDetailsBox}>
                     {selectedDoctor.city ? (
-                      <Text style={styles.cardDetailItem}>📍 {selectedDoctor.address ? `${selectedDoctor.address}, ` : ''}{selectedDoctor.city}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Feather name="map-pin" size={13} color={colors.textSecondary} />
+                        <Text style={styles.cardDetailItem}>{selectedDoctor.address ? `${selectedDoctor.address}, ` : ''}{selectedDoctor.city}</Text>
+                      </View>
                     ) : null}
                     {selectedDoctor.workingHours ? (
-                      <Text style={styles.cardDetailItem}>🕐 {selectedDoctor.workingHours}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Feather name="clock" size={13} color={colors.textSecondary} />
+                        <Text style={styles.cardDetailItem}>{selectedDoctor.workingHours}</Text>
+                      </View>
                     ) : null}
                   </View>
                 ) : null}
@@ -711,7 +738,7 @@ export default function PatientMapScreen({ navigation, route }) {
                 {/* Equipment */}
                 {selectedDoctor.equipment ? (
                   <View style={styles.cardEquipmentBox}>
-                    <Text style={styles.cardEquipmentLabel}>🩺 {t('patientMap.equipmentServices')}</Text>
+                    <Text style={styles.cardEquipmentLabel}>{t('patientMap.equipmentServices')}</Text>
                     <Text style={styles.cardEquipment}>{selectedDoctor.equipment}</Text>
                   </View>
                 ) : null}
@@ -742,7 +769,10 @@ export default function PatientMapScreen({ navigation, route }) {
                     <View style={styles.reviewsSection}>
                       <View style={styles.reviewsHeader}>
                         <Text style={styles.reviewsTitle}>{t('patientMap.patientReviews')}</Text>
-                        <Text style={styles.reviewsCount}>⭐ {avg('overall')} · {doctorRatings.length} {t('patientMap.reviews')}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Feather name="star" size={12} color="#f59e0b" />
+                          <Text style={styles.reviewsCount}>{avg('overall')} · {doctorRatings.length} {t('patientMap.reviews')}</Text>
+                        </View>
                       </View>
                       <View style={styles.reviewsBars}>
                         {REVIEW_CATEGORIES.map(({ field }) => (
@@ -753,7 +783,10 @@ export default function PatientMapScreen({ navigation, route }) {
                                 : field === 'attitude' ? t('patientMap.catAttitude')
                                 : t('patientMap.catCleanliness')}
                             </Text>
-                            <Text style={styles.reviewBarVal}>{avg(field)}★</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                              <Text style={styles.reviewBarVal}>{avg(field)}</Text>
+                              <Feather name="star" size={10} color="#f59e0b" />
+                            </View>
                           </View>
                         ))}
                       </View>
@@ -778,7 +811,8 @@ export default function PatientMapScreen({ navigation, route }) {
                       style={styles.directionsBtn}
                       onPress={() => handleGoNow(selectedDoctor)}
                     >
-                      <Text style={styles.directionsBtnText}>🗺️ {t('patientMap.goNow')}</Text>
+                      <Feather name="navigation" size={15} color="#1d4ed8" style={{ marginRight: 6 }} />
+                      <Text style={styles.directionsBtnText}>{t('patientMap.goNow')}</Text>
                     </TouchableOpacity>
 
                     {/* Book appointment button */}
@@ -787,22 +821,24 @@ export default function PatientMapScreen({ navigation, route }) {
                         style={styles.bookBtn}
                         onPress={() => { setCardVisible(false); setBookingVisible(true); }}
                       >
-                        <Text style={styles.bookBtnText}>📅 {t('patientMap.makeAppointment')}</Text>
+                        <Feather name="calendar" size={15} color="#fff" style={{ marginRight: 6 }} />
+                        <Text style={styles.bookBtnText}>{t('patientMap.makeAppointment')}</Text>
                       </TouchableOpacity>
                     ) : (
                       <View style={styles.bookBtnDisabled}>
                         <Text style={styles.bookBtnDisabledText}>
-                          {selectedDoctor.status !== 'in_office' ? `⚠️ ${t('patientMap.doctorUnavailable')}` : `⚠️ ${t('patientMap.noSlotsAvailable')}`}
+                          {selectedDoctor.status !== 'in_office' ? t('patientMap.doctorUnavailable') : t('patientMap.noSlotsAvailable')}
                         </Text>
                       </View>
                     )}
 
                     {/* Rate & Review */}
                     <TouchableOpacity
-                      style={styles.rateBtn}
+                      style={[styles.rateBtn, { flexDirection: 'row', justifyContent: 'center' }]}
                       onPress={openRatingModal}
                     >
-                      <Text style={styles.rateBtnText}>⭐ {t('patientMap.rateReview')}</Text>
+                      <Feather name="star" size={15} color={colors.primary} style={{ marginRight: 6 }} />
+                      <Text style={styles.rateBtnText}>{t('patientMap.rateReview')}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -881,12 +917,14 @@ export default function PatientMapScreen({ navigation, route }) {
             />
 
             {selectedDoctor?.acceptMode === 'auto' ? (
-              <View style={styles.autoAcceptBadge}>
-                <Text style={styles.autoAcceptText}>⚡ {t('patientMap.autoConfirm')}</Text>
+              <View style={[styles.autoAcceptBadge, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}>
+                <Feather name="zap" size={14} color={colors.primary} />
+                <Text style={styles.autoAcceptText}>{t('patientMap.autoConfirm')}</Text>
               </View>
             ) : (
-              <View style={styles.manualBadge}>
-                <Text style={styles.manualText}>✋ {t('patientMap.needsApproval')}</Text>
+              <View style={[styles.manualBadge, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}>
+                <Feather name="clock" size={14} color="#92400e" />
+                <Text style={styles.manualText}>{t('patientMap.needsApproval')}</Text>
               </View>
             )}
 
@@ -962,158 +1000,126 @@ export default function PatientMapScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa', paddingTop: 50 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
-  loadingText: { marginTop: 12, color: '#6b7280', fontSize: 14 },
+const createStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background, paddingTop: 50 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
+  loadingText: { marginTop: 12, color: c.textSecondary, fontSize: 14 },
 
   // Search
   searchContainer: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 10 },
-  searchIcon: { fontSize: 16, marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 15, color: '#111827' },
-  searchClear: { fontSize: 14, color: '#9ca3af', paddingLeft: 8 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: c.border, elevation: 6, shadowColor: c.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 10 },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: c.text },
+  searchClear: { fontSize: 14, color: c.textTertiary, paddingLeft: 8 },
 
   // Filters
   filterWrapper: { marginBottom: 4 },
   filterBar: { paddingHorizontal: 16, gap: 8 },
-  filterChip: { backgroundColor: '#fff', borderRadius: 20, paddingVertical: 7, paddingHorizontal: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
-  filterChipActive: { backgroundColor: '#16a34a' },
-  filterChipText: { fontSize: 13, color: '#374151', fontWeight: '500' },
+  filterChip: { backgroundColor: c.card, borderRadius: 20, paddingVertical: 7, paddingHorizontal: 16, borderWidth: 1, borderColor: c.border, elevation: 3, shadowColor: c.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
+  filterChipActive: { backgroundColor: c.primary, borderColor: c.primary },
+  filterChipText: { fontSize: 13, color: c.textSecondary, fontWeight: '500' },
   filterChipTextActive: { color: '#fff', fontWeight: '700' },
 
   // Count row
   countRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, gap: 10 },
-  countText: { fontSize: 13, fontWeight: '600', color: '#6b7280', flex: 1 },
+  countText: { fontSize: 13, fontWeight: '600', color: c.textSecondary, flex: 1 },
 
   // Doctor list
-  listContent: { paddingHorizontal: 16, paddingBottom: 100, paddingTop: 4 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 4 },
   emptyContainer: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 20 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 17, fontWeight: '700', color: '#374151', marginBottom: 6 },
-  emptySubText: { fontSize: 13, color: '#9ca3af', textAlign: 'center' },
+  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  emptyText: { fontSize: 17, fontWeight: '700', color: c.text, marginBottom: 6 },
+  emptySubText: { fontSize: 13, color: c.textTertiary, textAlign: 'center' },
 
   // Doctor list card
-  doctorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 12, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
+  doctorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, borderRadius: 16, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: c.border, elevation: 2, shadowColor: c.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6 },
   doctorCardPhoto: { width: 64, height: 64, borderRadius: 12 },
-  doctorCardPhotoPlaceholder: { backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center' },
+  doctorCardPhotoPlaceholder: { backgroundColor: c.primaryLight, justifyContent: 'center', alignItems: 'center' },
   doctorCardInfo: { flex: 1, marginLeft: 12 },
   doctorCardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  doctorCardName: { fontSize: 15, fontWeight: '700', color: '#111827', flex: 1, marginRight: 6 },
+  doctorCardName: { fontSize: 15, fontWeight: '700', color: c.text, flex: 1, marginRight: 6 },
   doctorCardRating: { fontSize: 12, fontWeight: '700', color: '#b45309' },
-  doctorCardSpecialty: { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  doctorCardDistance: { fontSize: 12, color: '#059669', marginTop: 2, fontWeight: '600' },
+  doctorCardSpecialty: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
+  doctorCardDistance: { fontSize: 12, color: c.success, marginTop: 2, fontWeight: '600' },
   doctorCardStatusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   doctorCardStatusDot: { width: 7, height: 7, borderRadius: 3.5, marginRight: 5 },
   doctorCardStatusLabel: { fontSize: 11, fontWeight: '600' },
-  doctorCardCost: { fontSize: 11, color: '#6b7280' },
-  doctorCardChevron: { fontSize: 24, color: '#d1d5db', marginLeft: 8 },
-
-  profileBtn: {
-    position: 'absolute',
-    bottom: 90,
-    right: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    elevation: 6,
-  },
-  profileBtnText: { fontSize: 16 },
-  suggestionBtn: {
-    position: 'absolute',
-    bottom: 30,
-    right: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    elevation: 6,
-  },
-  suggestionBtnText: { fontSize: 16 },
+  doctorCardCost: { fontSize: 11, color: c.textSecondary },
+  doctorCardChevron: { fontSize: 24, color: c.textTertiary, marginLeft: 8 },
 
   // Back button (inline in count row)
-  backBtn: {
-    backgroundColor: '#f0fdf4',
-    borderRadius: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  backBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#059669',
-  },
+  backBtn: { backgroundColor: c.primaryLight, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12 },
+  backBtnText: { fontSize: 14, fontWeight: '600', color: c.primary },
 
   // Doctor card bottom sheet
-  cardOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
-  cardSheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 44, maxHeight: '85%' },
-  dragHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  cardOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: c.overlay },
+  cardSheet: { backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 44, maxHeight: '85%' },
+  dragHandle: { width: 40, height: 4, backgroundColor: c.border, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   cardHeader: { flexDirection: 'row', gap: 14, marginBottom: 16 },
   cardPhoto: { width: 80, height: 80, borderRadius: 16 },
   cardInfo: { flex: 1 },
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardName: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  cardName: { fontSize: 18, fontWeight: '800', color: c.text },
   cardRatingBadge: { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 },
   cardRatingText: { color: '#b45309', fontSize: 12, fontWeight: '700' },
-  cardNameAr: { fontSize: 14, color: '#374151', textAlign: 'right', marginTop: 2 },
-  cardSpecialty: { fontSize: 14, color: '#6b7280', marginTop: 3 },
-  cardCabinet: { fontSize: 13, color: '#9ca3af', marginTop: 2 },
-  cardDistance: { fontSize: 12, color: '#059669', marginTop: 4, fontWeight: '600' },
+  cardNameAr: { fontSize: 14, color: c.textSecondary, textAlign: 'right', marginTop: 2 },
+  cardSpecialty: { fontSize: 14, color: c.textSecondary, marginTop: 3 },
+  cardCabinet: { fontSize: 13, color: c.textTertiary, marginTop: 2 },
+  cardDistance: { fontSize: 12, color: c.success, marginTop: 4, fontWeight: '600' },
   cardStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   cardStatusDot: { width: 8, height: 8, borderRadius: 4 },
   cardStatusText: { fontSize: 13, fontWeight: '600' },
-  cardStats: { flexDirection: 'row', backgroundColor: '#f9fafb', borderRadius: 16, padding: 16, marginBottom: 14 },
+  cardStats: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 16, padding: 16, marginBottom: 14 },
   cardStat: { flex: 1, alignItems: 'center' },
-  cardStatValue: { fontSize: 15, fontWeight: '700', color: '#111827' },
-  cardStatLabel: { fontSize: 11, color: '#9ca3af', marginTop: 3 },
-  cardStatDivider: { width: 1, backgroundColor: '#e5e7eb' },
-  cardEquipment: { fontSize: 13, color: '#6b7280', marginBottom: 12, lineHeight: 20 },
+  cardStatValue: { fontSize: 15, fontWeight: '700', color: c.text },
+  cardStatLabel: { fontSize: 11, color: c.textTertiary, marginTop: 3 },
+  cardStatDivider: { width: 1, backgroundColor: c.border },
+  cardEquipment: { fontSize: 13, color: c.textSecondary, marginBottom: 12, lineHeight: 20 },
   cardPhotosRow: { marginBottom: 16 },
   cardPhotoThumbWrap: { marginRight: 10 },
   cardPhotoThumb: { width: 120, height: 80, borderRadius: 12 },
-  cardPhotoThumbLabel: { fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 4 },
+  cardPhotoThumbLabel: { fontSize: 11, color: c.textTertiary, textAlign: 'center', marginTop: 4 },
   cardActions: { gap: 10 },
-  bookBtn: { backgroundColor: '#16a34a', padding: 16, borderRadius: 14, alignItems: 'center' },
+  bookBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: c.primary, padding: 16, borderRadius: 14 },
   bookBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  bookBtnDisabled: { backgroundColor: '#f3f4f6', padding: 16, borderRadius: 14, alignItems: 'center' },
-  bookBtnDisabledText: { color: '#9ca3af', fontWeight: '600', fontSize: 15 },
-  rateBtn: { backgroundColor: '#f0fdf4', borderWidth: 1.5, borderColor: '#16a34a', padding: 14, borderRadius: 14, alignItems: 'center' },
-  rateBtnText: { color: '#16a34a', fontWeight: '700', fontSize: 15 },
+  bookBtnDisabled: { backgroundColor: c.muted, padding: 16, borderRadius: 14, alignItems: 'center' },
+  bookBtnDisabledText: { color: c.textTertiary, fontWeight: '600', fontSize: 15 },
+  rateBtn: { backgroundColor: c.primaryLight, borderWidth: 1.5, borderColor: c.primary, padding: 14, borderRadius: 14, alignItems: 'center' },
+  rateBtnText: { color: c.primary, fontWeight: '700', fontSize: 15 },
 
   // Modals
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 44 },
-  modalTitle: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 4 },
-  modalSub: { fontSize: 14, color: '#6b7280', marginBottom: 20 },
-  modalLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6, marginTop: 10 },
-  modalInput: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 14, fontSize: 15, backgroundColor: '#fafafa', marginBottom: 4 },
-  bookingProfileBox: { backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', padding: 12, marginBottom: 8 },
-  bookingProfileTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
-  bookingProfileText: { fontSize: 12, color: '#475569', marginBottom: 2 },
+  modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 44 },
+  modalTitle: { fontSize: 22, fontWeight: '800', color: c.text, marginBottom: 4 },
+  modalSub: { fontSize: 14, color: c.textSecondary, marginBottom: 20 },
+  modalLabel: { fontSize: 13, fontWeight: '600', color: c.textSecondary, marginBottom: 6, marginTop: 10 },
+  modalInput: { borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 14, fontSize: 15, backgroundColor: c.inputBackground, color: c.text, marginBottom: 4 },
+  bookingProfileBox: { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, padding: 12, marginBottom: 8 },
+  bookingProfileTitle: { fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 4 },
+  bookingProfileText: { fontSize: 12, color: c.textSecondary, marginBottom: 2 },
   bookingForSwitchRow: { flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 8 },
-  bookingForBtn: { flex: 1, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 8, alignItems: 'center', backgroundColor: '#fff' },
-  bookingForBtnActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  bookingForBtnText: { color: '#334155', fontWeight: '600', fontSize: 12 },
+  bookingForBtn: { flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingVertical: 8, alignItems: 'center', backgroundColor: c.card },
+  bookingForBtnActive: { backgroundColor: c.primary, borderColor: c.primary },
+  bookingForBtnText: { color: c.textSecondary, fontWeight: '600', fontSize: 12 },
   bookingForBtnTextActive: { color: '#fff' },
-  autoAcceptBadge: { backgroundColor: '#f0fdf4', borderRadius: 10, padding: 10, marginVertical: 10 },
-  autoAcceptText: { color: '#16a34a', fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  autoAcceptBadge: { backgroundColor: c.primaryLight, borderRadius: 10, padding: 10, marginVertical: 10 },
+  autoAcceptText: { color: c.primary, fontSize: 13, fontWeight: '600', textAlign: 'center' },
   manualBadge: { backgroundColor: '#fef3c7', borderRadius: 10, padding: 10, marginVertical: 10 },
   manualText: { color: '#92400e', fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  modalBtn: { backgroundColor: '#16a34a', padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 12 },
+  modalBtn: { backgroundColor: c.primary, padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 12 },
   modalBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   modalCancelBtn: { padding: 14, alignItems: 'center' },
-  modalCancelText: { color: '#6b7280', fontSize: 15 },
+  modalCancelText: { color: c.textSecondary, fontSize: 15 },
 
   // Stars
   starRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 8 },
-  starLabel: { fontSize: 14, color: '#374151', fontWeight: '500', flex: 1 },
+  starLabel: { fontSize: 14, color: c.textSecondary, fontWeight: '500', flex: 1 },
   stars: { flexDirection: 'row', gap: 4 },
-  star: { fontSize: 28, color: '#e5e7eb' },
+  star: { fontSize: 28, color: c.border },
   starFilled: { color: '#f59e0b' },
 
   // Appointment banner
-  apptBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a', marginHorizontal: 16, marginBottom: 4, borderRadius: 16, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, overflow: 'hidden' },
+  apptBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.primary, marginHorizontal: 16, marginBottom: 4, borderRadius: 16, elevation: 4, shadowColor: c.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, overflow: 'hidden' },
   apptBannerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
   apptBannerIcon: { fontSize: 22, marginRight: 10 },
   apptBannerInfo: { flex: 1 },
@@ -1123,28 +1129,28 @@ const styles = StyleSheet.create({
   apptBannerNavText: { fontSize: 22 },
 
   // Card experience & details
-  cardExperience: { fontSize: 12, color: '#6b7280', marginTop: 3 },
-  cardDetailsBox: { backgroundColor: '#f9fafb', borderRadius: 12, padding: 12, marginBottom: 12, gap: 4 },
-  cardDetailItem: { fontSize: 13, color: '#374151' },
-  cardEquipmentBox: { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 12, marginBottom: 12 },
-  cardEquipmentLabel: { fontSize: 11, fontWeight: '700', color: '#16a34a', marginBottom: 4, letterSpacing: 0.5 },
+  cardExperience: { fontSize: 12, color: c.textSecondary, marginTop: 3 },
+  cardDetailsBox: { backgroundColor: c.surface, borderRadius: 12, padding: 12, marginBottom: 12, gap: 4 },
+  cardDetailItem: { fontSize: 13, color: c.textSecondary },
+  cardEquipmentBox: { backgroundColor: c.primaryLight, borderRadius: 12, padding: 12, marginBottom: 12 },
+  cardEquipmentLabel: { fontSize: 11, fontWeight: '700', color: c.primary, marginBottom: 4, letterSpacing: 0.5 },
 
   // Reviews section
-  reviewsSection: { borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 16, marginTop: 4, marginBottom: 8 },
+  reviewsSection: { borderTopWidth: 1, borderTopColor: c.borderLight, paddingTop: 16, marginTop: 4, marginBottom: 8 },
   reviewsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  reviewsTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  reviewsTitle: { fontSize: 15, fontWeight: '700', color: c.text },
   reviewsCount: { fontSize: 13, color: '#f59e0b', fontWeight: '600' },
   reviewsBars: { flexDirection: 'row', gap: 6, marginBottom: 12 },
-  reviewBarItem: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 8, padding: 8, alignItems: 'center' },
-  reviewBarLabel: { fontSize: 10, color: '#9ca3af', fontWeight: '600', marginBottom: 3 },
+  reviewBarItem: { flex: 1, backgroundColor: c.surface, borderRadius: 8, padding: 8, alignItems: 'center' },
+  reviewBarLabel: { fontSize: 10, color: c.textTertiary, fontWeight: '600', marginBottom: 3 },
   reviewBarVal: { fontSize: 13, fontWeight: '700', color: '#f59e0b' },
-  commentCard: { backgroundColor: '#fefce8', borderRadius: 10, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: '#f59e0b' },
-  commentText: { fontSize: 13, color: '#374151', fontStyle: 'italic', lineHeight: 18 },
-  commentDate: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
-  seeAllReviews: { fontSize: 13, color: '#6b7280', textAlign: 'center', paddingVertical: 6 },
+  commentCard: { backgroundColor: c.surface, borderRadius: 10, padding: 10, marginBottom: 6, borderLeftWidth: 3, borderLeftColor: '#f59e0b' },
+  commentText: { fontSize: 13, color: c.textSecondary, fontStyle: 'italic', lineHeight: 18 },
+  commentDate: { fontSize: 11, color: c.textTertiary, marginTop: 4 },
+  seeAllReviews: { fontSize: 13, color: c.textSecondary, textAlign: 'center', paddingVertical: 6 },
 
   // Action sheet buttons
-  directionsBtn: { backgroundColor: '#eff6ff', borderWidth: 1.5, borderColor: '#3b82f6', padding: 14, borderRadius: 14, alignItems: 'center', marginBottom: 2 },
+  directionsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff', borderWidth: 1.5, borderColor: '#3b82f6', padding: 14, borderRadius: 14, marginBottom: 2 },
   directionsBtnText: { color: '#1d4ed8', fontWeight: '700', fontSize: 15 },
   onMyWayBtn: { backgroundColor: '#fff7ed', borderWidth: 1.5, borderColor: '#f97316', padding: 14, borderRadius: 14, alignItems: 'center' },
   onMyWayBtnText: { color: '#c2410c', fontWeight: '700', fontSize: 15 },

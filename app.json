@@ -40,14 +40,14 @@
     },
     "plugins": [
       "expo-localization",
-      "expo-auth-session",
       [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
           "color": "#059669"
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

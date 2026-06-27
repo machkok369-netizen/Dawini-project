@@ -11,15 +11,7 @@ import * as Location from 'expo-location';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from './LanguageContext';
 import i18n from './i18n';
-
-const emojiMap = {
-  '🦷': ['dentiste', 'طبيب أسنان', 'اسنان', 'dentaire', 'teeth'],
-  '👁️': ['ophtalmologue', 'عيون', 'ophtalmo', 'eye'],
-  '👶': ['pédiatre', 'طبيب اطفال', 'pediatrie'],
-  '🫀': ['cardiologue', 'قلب', 'cardio'],
-  '🦴': ['orthopédiste', 'عظام', 'ortho'],
-  '🩺': ['generaliste', 'عام', 'général']
-};
+import { Feather } from '@expo/vector-icons';
 
 const normalizeText = (str = '') => 
   str.normalize('NFD')
@@ -48,18 +40,18 @@ const getDistanceKm = (lat1, lon1, lat2, lon2) => {
 };
 
 const DOCTOR_STATUS_MAP = {
-  in_office: { label: '🟢 IN OFFICE',     color: '#2E7D32', dot: '#4CAF50' },
-  brb:       { label: '🟡 BE RIGHT BACK', color: '#d97706', dot: '#f59e0b' },
-  away:      { label: '🔴 AWAY',          color: '#dc2626', dot: '#ef4444' },
-  vacation:  { label: '🔵 ON VACATION',   color: '#2563eb', dot: '#3b82f6' },
+  in_office: { label: 'IN OFFICE',     color: '#2E7D32', dot: '#4CAF50' },
+  brb:       { label: 'BE RIGHT BACK', color: '#d97706', dot: '#f59e0b' },
+  away:      { label: 'AWAY',          color: '#dc2626', dot: '#ef4444' },
+  vacation:  { label: 'ON VACATION',   color: '#2563eb', dot: '#3b82f6' },
 };
 
 const SPECIALTIES = ['All', 'Generaliste', 'Dentiste', 'Ophtalmologue', 'Pédiatre', 'Cardiologue', 'Orthopédiste'];
 const MIN_RATINGS = [{ label: 'Any', value: 0 }, { label: '3+', value: 3 }, { label: '4+', value: 4 }, { label: '4.5+', value: 4.5 }];
 const SORT_OPTIONS = [
   { key: 'default',  label: 'Default'  },
-  { key: 'rating',   label: '⭐ Rating'  },
-  { key: 'distance', label: '📍 Distance' },
+  { key: 'rating',   label: 'Rating'   },
+  { key: 'distance', label: 'Distance' },
 ];
 
 export default function DoctorListScreen({ navigation }) {
@@ -193,14 +185,7 @@ export default function DoctorListScreen({ navigation }) {
           normalizeText(d.specialty).includes(qNorm) ||
           normalizeText(d.city || '').includes(qNorm)
         );
-        if (matchFields) return true;
-        for (const char of searchQuery) {
-          if (emojiMap[char]) {
-            const keywords = emojiMap[char];
-            if (keywords.some(kw => normalizeText(d.specialty).includes(kw))) return true;
-          }
-        }
-        return false;
+        return matchFields;
       });
     }
 
@@ -243,7 +228,7 @@ export default function DoctorListScreen({ navigation }) {
 
   const renderDoctor = ({ item }) => {
     const isPremium = checkSubscriptionStatus(item.subscriptionExpiry);
-    const statusInfo = DOCTOR_STATUS_MAP[item.status] || { label: '⚪ OFFLINE', color: '#999', dot: '#BDC3C7' };
+    const statusInfo = DOCTOR_STATUS_MAP[item.status] || { label: 'OFFLINE', color: '#999', dot: '#BDC3C7' };
     const canNavigate = item.status === 'in_office';
     const isFav = savedDoctors.includes(item.id);
     const dist = userLocation && item.location
@@ -257,26 +242,35 @@ export default function DoctorListScreen({ navigation }) {
           <View style={styles.info}>
             <View style={styles.nameRow}>
               <Text style={styles.name}>Dr. {item.fullName || item.name}</Text>
-              {isPremium && <Text style={styles.goldBadge}>✅</Text>}
+              {isPremium && (
+                <Feather name="check-circle" size={14} color="#16a34a" style={{ marginLeft: 4 }} />
+              )}
               <View style={[styles.pulse, { backgroundColor: statusInfo.dot }]} />
             </View>
             <Text style={styles.subText}>{item.specialty} • {item.experience || 0} yrs</Text>
             {item.averageRating > 0 && (
-              <Text style={styles.ratingText}>⭐ {item.averageRating.toFixed(1)} ({item.totalRatings || 0})</Text>
+              <View style={styles.ratingRow}>
+                <Feather name="star" size={12} color="#f59e0b" />
+                <Text style={styles.ratingText}> {item.averageRating.toFixed(1)} ({item.totalRatings || 0})</Text>
+              </View>
             )}
             {dist !== null && (
-              <Text style={styles.distanceText}>📍 {dist < 1 ? `${Math.round(dist * 1000)}m` : `${dist.toFixed(1)}km`}</Text>
+              <View style={styles.distanceRow}>
+                <Feather name="map-pin" size={12} color="#6b7280" />
+                <Text style={styles.distanceText}> {dist < 1 ? `${Math.round(dist * 1000)}m` : `${dist.toFixed(1)}km`}</Text>
+              </View>
             )}
           </View>
           <TouchableOpacity style={styles.favBtn} onPress={() => toggleFavorite(item.id)}>
-            <Text style={styles.favBtnText}>{isFav ? '❤️' : '🤍'}</Text>
+            <Feather name="heart" size={20} color={isFav ? '#ef4444' : '#d1d5db'} />
           </TouchableOpacity>
         </View>
         <View style={styles.footer}>
           <Text style={[styles.status, { color: statusInfo.color }]}>{statusInfo.label}</Text>
           {canNavigate && (
             <TouchableOpacity style={styles.onWayBtn} onPress={() => handleStartJourney(item)}>
-              <Text style={styles.btnText}>🗺️ {t('doctorList.getDirections')}</Text>
+              <Feather name="navigation" size={14} color="#fff" style={{ marginRight: 5 }} />
+              <Text style={styles.btnText}>{t('doctorList.getDirections')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -324,7 +318,8 @@ export default function DoctorListScreen({ navigation }) {
           style={styles.doctorFloatingBtn} 
           onPress={() => navigation.navigate('DoctorDashboard')}
         >
-          <Text style={styles.doctorBtnText}>🩺 {t('doctorList.myDashboard')}</Text>
+          <Feather name="activity" size={16} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={styles.doctorBtnText}>{t('doctorList.myDashboard')}</Text>
         </TouchableOpacity>
       )}
 
@@ -334,7 +329,8 @@ export default function DoctorListScreen({ navigation }) {
           style={styles.adminFloatingBtn} 
           onPress={() => navigation.navigate('Admin')}
         >
-          <Text style={styles.adminBtnText}>🛡️ {t('doctorList.adminPanel')}</Text>
+          <Feather name="shield" size={16} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={styles.adminBtnText}>{t('doctorList.adminPanel')}</Text>
         </TouchableOpacity>
       )}
 
@@ -377,8 +373,13 @@ export default function DoctorListScreen({ navigation }) {
               style={[styles.toggleRow, filterAvailableNow && styles.toggleRowActive]}
               onPress={() => setFilterAvailableNow(v => !v)}
             >
-              <Text style={styles.toggleLabel}>🟢 {t('doctorList.availableNow')}</Text>
-              <Text style={styles.toggleSwitch}>{filterAvailableNow ? '✅' : '⬜'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#22c55e' }} />
+                <Text style={styles.toggleLabel}>{t('doctorList.availableNow')}</Text>
+              </View>
+              <View style={[styles.togglePill, filterAvailableNow && styles.togglePillActive]}>
+                <View style={[styles.toggleThumb, filterAvailableNow && styles.toggleThumbActive]} />
+              </View>
             </TouchableOpacity>
 
             {/* Sort */}
@@ -435,18 +436,20 @@ const styles = StyleSheet.create({
   goldBadge: { marginLeft: 6 },
   pulse: { width: 10, height: 10, borderRadius: 5, marginLeft: 10 },
   subText: { color: '#65676B', fontSize: 14 },
-  ratingText: { color: '#f59e0b', fontSize: 13, fontWeight: '600', marginTop: 2 },
-  distanceText: { color: '#6b7280', fontSize: 12, marginTop: 1 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  ratingText: { color: '#f59e0b', fontSize: 13, fontWeight: '600' },
+  distanceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 1 },
+  distanceText: { color: '#6b7280', fontSize: 12 },
   favBtn: { padding: 6 },
-  favBtnText: { fontSize: 20 },
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 },
   status: { fontWeight: 'bold', fontSize: 12 },
-  onWayBtn: { backgroundColor: '#2ecc71', padding: 10, borderRadius: 12 },
+  onWayBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2ecc71', padding: 10, borderRadius: 12 },
   btnText: { color: '#FFF', fontWeight: 'bold' },
   emptyBox: { flex: 1, alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#9ca3af', fontSize: 15 },
   doctorFloatingBtn: {
     position: 'absolute', bottom: 30, left: 20,
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#2ecc71', paddingVertical: 12, paddingHorizontal: 20,
     borderRadius: 30, elevation: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4,
@@ -454,6 +457,7 @@ const styles = StyleSheet.create({
   doctorBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
   adminFloatingBtn: {
     position: 'absolute', bottom: 30, right: 20,
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#e74c3c', paddingVertical: 12, paddingHorizontal: 20,
     borderRadius: 30, elevation: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4,
@@ -472,7 +476,10 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
   toggleRowActive: { borderColor: '#2ecc71', backgroundColor: '#f0fdf4' },
   toggleLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  toggleSwitch: { fontSize: 18 },
+  togglePill: { width: 44, height: 24, borderRadius: 12, backgroundColor: '#e5e7eb', justifyContent: 'center', paddingHorizontal: 2 },
+  togglePillActive: { backgroundColor: '#22c55e' },
+  toggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', alignSelf: 'flex-start' },
+  toggleThumbActive: { alignSelf: 'flex-end' },
   filterActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
   resetBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: '#e5e7eb', alignItems: 'center' },
   resetBtnText: { fontSize: 15, fontWeight: '600', color: '#374151' },
