@@ -9,6 +9,7 @@ import { auth, db } from './firebaseConfig';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../contexts/LanguageContext';
 import i18n from '../i18n';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RegisterScreen({ navigation }) {
   const { t } = useTranslation('screens');
@@ -18,6 +19,8 @@ export default function RegisterScreen({ navigation }) {
   const [role, setRole] = useState('patient'); 
   const [specialty, setSpecialty] = useState('');
   const [phone, setPhone] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
 const handleRegister = async () => {
@@ -35,6 +38,10 @@ const handleRegister = async () => {
     return;
   }
   if (role === 'doctor' && !specialty.trim()) {
+    Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorFillFields'));
+    return;
+  }
+  if (role === 'pharma' && !companyName.trim()) {
     Alert.alert(i18n.t('screens:register.title'), i18n.t('screens:register.errorFillFields'));
     return;
   }
@@ -59,6 +66,12 @@ const handleRegister = async () => {
       termsAccepted: false,
     };
 
+    if (role === 'pharma') {
+      userData.companyName = companyName.trim();
+      userData.contactPhone = contactPhone.trim();
+      userData.profileCompleted = true; // pharma accounts skip extra onboarding
+    }
+
     console.log('📝 [Register] Step 2: Writing to Firestore at path: users/' + user.uid);
     console.log('📝 [Register] Data being written:', userData);
 
@@ -66,17 +79,24 @@ const handleRegister = async () => {
 
     console.log('✅ [Register] Step 2 SUCCESS - Firestore document created');
     Alert.alert(i18n.t('screens:register.successTitle'), i18n.t('screens:register.successMsg'));
+    await AsyncStorage.setItem('userRole', role);
 
     if (role === 'patient') {
       navigation.replace('TermsAcceptance', {
         uid: user.uid,
         nextScreen: 'PatientOnboarding',
       });
-    } else {
+    } else if (role === 'doctor') {
       navigation.replace('TermsAcceptance', {
         uid: user.uid,
         nextScreen: 'EditProfile',
         nextScreenParams: { isNewDoctor: true },
+      });
+    } else {
+      // pharma — awaiting admin verification
+      navigation.replace('TermsAcceptance', {
+        uid: user.uid,
+        nextScreen: 'PharmaDashboard',
       });
     }
   } catch (error) {
@@ -128,6 +148,13 @@ const handleRegister = async () => {
           >
             <Text style={role === 'doctor' ? styles.activeText : styles.roleText}>{t('register.roleDoctor')}</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.roleButton, role === 'pharma' && styles.activeRole]} 
+            onPress={() => setRole('pharma')}
+          >
+            <Text style={role === 'pharma' ? styles.activeText : styles.roleText}>{t('register.rolePharma', { defaultValue: 'Pharma Company' })}</Text>
+          </TouchableOpacity>
         </View>
 
         {role === 'doctor' && (
@@ -143,6 +170,24 @@ const handleRegister = async () => {
               style={styles.input} 
               onChangeText={setPhone} 
               value={phone} 
+              keyboardType="phone-pad"
+            />
+          </View>
+        )}
+
+        {role === 'pharma' && (
+          <View style={{ width: '100%', marginBottom: 10 }}>
+            <TextInput 
+              placeholder={t('register.companyNamePlaceholder', { defaultValue: 'Company Name' })}
+              style={styles.input} 
+              onChangeText={setCompanyName} 
+              value={companyName} 
+            />
+            <TextInput 
+              placeholder={t('register.contactPhonePlaceholder', { defaultValue: 'Contact Phone' })}
+              style={styles.input} 
+              onChangeText={setContactPhone} 
+              value={contactPhone} 
               keyboardType="phone-pad"
             />
           </View>
