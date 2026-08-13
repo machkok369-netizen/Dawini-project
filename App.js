@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import NotificationService from './NotificationService';
@@ -20,10 +20,13 @@ import NotificationsScreen from './NotificationsScreen';
 import AdminScreen from './AdminScreen';
 import PatientProfileScreen from './PatientProfileScreen';
 import SubscriptionPaymentScreen from './SubscriptionPaymentScreen';
+import PharmaDashboard from './PharmaDashboard';
+import PharmaAds from './PharmaAds';
+
 const Stack = createStackNavigator();
 
 export default function App() {
-  useEffect(() => {
+  React.useEffect(() => {
     // Register for push notifications on app start so tokens are always fresh
     NotificationService.registerForPushNotifications();
   }, []);
@@ -88,6 +91,18 @@ export default function App() {
           name="DoctorDashboard"
           component={DoctorDashboardScreen}
           options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="PharmaDashboard"
+          component={PharmaDashboard}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="PharmaAds"
+          component={PharmaAds}
+          options={{ title: 'Manage Ads' }}
         />
 
         <Stack.Screen
