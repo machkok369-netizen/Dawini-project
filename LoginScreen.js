@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
@@ -35,6 +35,24 @@ export default function LoginScreen({ navigation }) {
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
   });
 
+  const determineNextScreen = (userData) => {
+    // Centralize routing logic so email and Google flows behave identically
+    let nextScreen = null;
+    let nextScreenParams = null;
+
+    if (userData.role === 'doctor') {
+      nextScreen = userData.profileCompleted ? 'DoctorDashboard' : 'EditProfile';
+      if (!userData.profileCompleted) nextScreenParams = { isNewDoctor: true };
+    } else if (userData.role === 'pharma') {
+      // Pharma accounts: auto-approved like doctors, they go to PharmaDashboard
+      nextScreen = 'PharmaDashboard';
+    } else {
+      nextScreen = userData.patientProfileCompleted ? 'PatientMap' : 'PatientOnboarding';
+    }
+
+    return { nextScreen, nextScreenParams };
+  };
+
   const handleEmailLogin = async () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !password) {
@@ -64,22 +82,7 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      // Determine next screen based on role and profile completion
-      let nextScreen, nextScreenParams;
-      if (userData.role === 'doctor') {
-        if (!userData.profileCompleted) {
-          nextScreen = 'EditProfile';
-          nextScreenParams = { isNewDoctor: true };
-        } else {
-          nextScreen = 'DoctorDashboard';
-        }
-      } else {
-        if (!userData.patientProfileCompleted) {
-          nextScreen = 'PatientOnboarding';
-        } else {
-          nextScreen = 'PatientMap';
-        }
-      }
+      const { nextScreen, nextScreenParams } = determineNextScreen(userData);
 
       // Redirect to Terms Acceptance if not yet accepted
       if (!userData.termsAccepted) {
@@ -119,6 +122,7 @@ export default function LoginScreen({ navigation }) {
     try {
       const result = await promptAsync();
       if (result.type !== 'success') {
+        setLoading(false);
         return;
       }
 
@@ -128,15 +132,17 @@ export default function LoginScreen({ navigation }) {
           t('login.googleTitle', { defaultValue: 'Google Sign-In' }),
           t('login.googleTokenMissing', { defaultValue: 'Google token was not returned. Please try again.' })
         );
+        setLoading(false);
         return;
       }
 
       const credential = GoogleAuthProvider.credential(idToken);
       const userCredential = await signInWithCredential(auth, credential);
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      const userDocRef = doc(db, 'users', userCredential.user.uid);
+      const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
-        // User doesn't exist, redirect to Register
+        // User doesn't exist, redirect to Register with prefilled googleUser
         navigation.replace('Register', {
           googleUser: {
             uid: userCredential.user.uid,
@@ -147,23 +153,7 @@ export default function LoginScreen({ navigation }) {
       }
 
       const userData = userDoc.data();
-
-      // Determine next screen based on role and profile completion
-      let nextScreen, nextScreenParams;
-      if (userData.role === 'doctor') {
-        if (!userData.profileCompleted) {
-          nextScreen = 'EditProfile';
-          nextScreenParams = { isNewDoctor: true };
-        } else {
-          nextScreen = 'DoctorDashboard';
-        }
-      } else {
-        if (!userData.patientProfileCompleted) {
-          nextScreen = 'PatientOnboarding';
-        } else {
-          nextScreen = 'PatientMap';
-        }
-      }
+      const { nextScreen, nextScreenParams } = determineNextScreen(userData);
 
       // Redirect to Terms Acceptance if not yet accepted
       if (!userData.termsAccepted) {
